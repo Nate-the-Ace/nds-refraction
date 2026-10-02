@@ -36,7 +36,7 @@ Pieces added after the first 25 levels:
 - **Glass ball**: a round prism. Where the beam strikes it sets the angle and the color. It has nothing to turn.
 - **Zoom lens**: a variable lens. Select it and drag the amber knob to squeeze it from a strong concave lens, through flat, to a strong convex lens (16 settings).
 - Fixed lenses come in many focal lengths, convex and concave.
-- **Black hole**: an obstacle that bends light with real Schwarzschild geometry. Beams that pass close curve a long way, wide beams are lensed into crossing caustics, and anything that reaches the black disc is swallowed. In the sandbox you can resize one with the amber handle on its edge, the Smaller/Larger buttons, or `[` and `]`.
+- **Black hole**: an obstacle that bends light with real Schwarzschild geometry. Beams that pass close curve a long way, wide beams are lensed into crossing caustics, and anything that reaches the black disc is swallowed. A board can hold any number of black holes: each hole's exact bend is computed separately and the bends are added, so one dominates up close and they combine where their pulls are comparable. In the sandbox you can resize one with the amber handle on its edge, the Smaller/Larger buttons, or `[` and `]`.
 
 **Endless** (menu): the game builds a new puzzle on the spot at one of five difficulties. The seed is shown in the title.
 

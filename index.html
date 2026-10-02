@@ -137,18 +137,12 @@ const BOX=[[0,0,W,0],[W,0,W,H],[W,H,0,H],[0,H,0,0]].map(([a,b,c,d])=>({x1:a,y1:b
 const GS=wl=>1+0.3*(550-wl)/150;
 const wlOf=r=>r.wl!==undefined?r.wl:WL[r.i];
 const SUB=4;
-function bhChord(r,bhs){
-  const gs=GS(wlOf(r));
-  let nb=null,nd=1e9;
-  for(const b of bhs){const d=Math.hypot(r.x-b.x,r.y-b.y);if(d<nd){nd=d;nb=b}}
-  const rs=nb.r*gs;
-  if(nd<=rs)return {cap:1,len:0};
-  const dx=r.x-nb.x,dy=r.y-nb.y;
+// One hole's exact geodesic step of length L from ray r. Returns the end point and direction.
+function bhStep(r,b,L,gs){
+  const rs=b.r*gs,dx=r.x-b.x,dy=r.y-b.y,nd=Math.hypot(dx,dy);
   const cp=(dx*r.dx+dy*r.dy)/nd,sn=(dx*r.dy-dy*r.dx)/nd,as=Math.abs(sn);
-  let L=Math.max(5,Math.min(40,nd*0.18));
-  if(cp<0)L=Math.min(L,nd-rs+1);
   let x2,y2,dx2,dy2,cap=0;
-  if(as<0.03){x2=r.x+r.dx*L;y2=r.y+r.dy*L;dx2=r.dx;dy2=r.dy;if(Math.hypot(x2-nb.x,y2-nb.y)<=rs)cap=1}
+  if(as<0.03){x2=r.x+r.dx*L;y2=r.y+r.dy*L;dx2=r.dx;dy2=r.dy;if(Math.hypot(x2-b.x,y2-b.y)<=rs)cap=1}
   else{
     const sg=sn>0?1:-1,u0=1/nd,k=1.5*rs;
     let u=u0,w=-u0*cp/as;
@@ -160,16 +154,32 @@ function bhChord(r,bhs){
     }
     if(u<=1e-7)u=1e-7;
     const phi=Math.atan2(dy,dx)+sg*dphi,rr=1/u;
-    x2=nb.x+rr*Math.cos(phi);y2=nb.y+rr*Math.sin(phi);
+    x2=b.x+rr*Math.cos(phi);y2=b.y+rr*Math.sin(phi);
     const q=w/u,vp=1/Math.sqrt(1+q*q),vr=-q*vp;
     dx2=vr*Math.cos(phi)-sg*vp*Math.sin(phi);dy2=vr*Math.sin(phi)+sg*vp*Math.cos(phi);
   }
+  return {x2,y2,dx2,dy2,cap};
+}
+// With several holes each one's exact step is computed on its own and the bends are added,
+// so a hole dominates where it is close and the pulls combine where they are comparable.
+function bhChord(r,bhs){
+  const gs=GS(wlOf(r));
+  let L=40;
   for(const b of bhs){
-    if(b===nb)continue;
-    const bx=b.x-x2,by=b.y-y2,d=Math.hypot(bx,by),dd=bx*dx2+by*dy2,px=bx-dd*dx2,py=by-dd*dy2;
-    const f=b.r*gs*L/(d*d*d);dx2+=px*f;dy2+=py*f;
+    const dx=r.x-b.x,dy=r.y-b.y,d=Math.hypot(dx,dy),rs=b.r*gs;
+    if(d<=rs)return {cap:1,len:0};
+    L=Math.min(L,Math.max(5,d*0.18));
+    if(dx*r.dx+dy*r.dy<0)L=Math.min(L,Math.max(d-rs+1,2));
   }
-  const hl=Math.hypot(dx2,dy2);dx2/=hl;dy2/=hl;
+  const sx=r.x+r.dx*L,sy=r.y+r.dy*L;
+  let ax=0,ay=0,adx=0,ady=0,cap=0;
+  for(const b of bhs){
+    const o=bhStep(r,b,L,gs);
+    if(o.cap)cap=1;
+    ax+=o.x2-sx;ay+=o.y2-sy;adx+=o.dx2-r.dx;ady+=o.dy2-r.dy;
+  }
+  const x2=sx+ax,y2=sy+ay;
+  let dx2=r.dx+adx,dy2=r.dy+ady;const hl=Math.hypot(dx2,dy2);dx2/=hl;dy2/=hl;
   const cx=x2-r.x,cy=y2-r.y,len=Math.hypot(cx,cy);
   if(len<1e-9)return {cap:1,len:0};
   return {cap,len,cx:cx/len,cy:cy/len,x2,y2,dx2,dy2};
@@ -653,7 +663,7 @@ const GEN_LEVELS=[
 /*hole 50919*/{"name":"Gravity well","hint":"A black hole bends light toward it, and shorter wavelengths bend more. Anything that crosses the black disc is lost. Place the mirrors where the bent beam arrives.","pieces":[{"t":"emit","x":785,"y":225,"a":150,"band":[520,570],"fixed":1},{"t":"bh","x":515,"y":305,"r":15,"fixed":1},{"t":"wall","x":775,"y":395,"w":30,"h":175,"a":90,"fixed":1},{"t":"mirror","x":405,"y":220,"a":30},{"t":"mirror","x":870,"y":190,"a":-75},{"t":"goal","x":125,"y":390,"band":[520,570],"r":28,"fixed":1,"need":0.4}],"sol":{"3":[265,310,-30],"4":[235,420,-30]}},
 /*spread 50525*/{"name":"Broadcast","hint":"A concave lens spreads light apart. Place it so the beam reaches every target.","pieces":[{"t":"emit","x":485,"y":530,"a":230,"band":[520,570],"fixed":1,"w":30,"nb":25},{"t":"wall","x":680,"y":85,"w":30,"h":115,"a":150,"fixed":1},{"t":"wall","x":865,"y":395,"w":30,"h":115,"a":105,"fixed":1},{"t":"lens","x":570,"y":220,"a":30,"f":-110},{"t":"goal","x":150,"y":190,"band":[520,570],"r":20,"need":0.15,"show":1,"fixed":1},{"t":"goal","x":180,"y":165,"band":[520,570],"r":20,"need":0.15,"show":1,"fixed":1},{"t":"goal","x":210,"y":140,"band":[520,570],"r":20,"need":0.15,"show":1,"fixed":1}],"sol":{"3":[410,440,-40]}},
 /*hole 50786*/{"name":"Point of no return","hint":"A black hole bends light toward it, and shorter wavelengths bend more. Anything that crosses the black disc is lost. Place the mirrors where the bent beam arrives.","pieces":[{"t":"emit","x":355,"y":240,"a":-59.99999999999999,"band":[520,570],"fixed":1},{"t":"bh","x":620,"y":330,"r":15,"fixed":1},{"t":"wall","x":195,"y":310,"w":30,"h":125,"a":90,"fixed":1},{"t":"mirror","x":265,"y":420,"a":-45},{"t":"mirror","x":280,"y":100,"a":90},{"t":"mirror","x":135,"y":425,"a":0},{"t":"goal","x":730,"y":315,"band":[520,570],"r":16,"fixed":1,"need":0.4}],"sol":{"3":[460,60,-5],"4":[705,495,35],"5":[885,435,-80]}},
-/*hole 51050*/{"name":"Orbital insertion","hint":"A black hole bends light toward it, and shorter wavelengths bend more. Anything that crosses the black disc is lost. Place the mirrors where the bent beam arrives.","pieces":[{"t":"emit","x":155,"y":465,"a":19.999999999999993,"band":[620,700],"fixed":1},{"t":"bh","x":530,"y":320,"r":15,"fixed":1},{"t":"bh","x":255,"y":330,"r":10,"fixed":1},{"t":"wall","x":290,"y":175,"w":30,"h":150,"a":75,"fixed":1},{"t":"mirror","x":145,"y":260,"a":75},{"t":"mirror","x":640,"y":485,"a":30},{"t":"mirror","x":335,"y":290,"a":-30},{"t":"goal","x":865,"y":415,"band":[620,700],"r":28,"fixed":1,"need":0.6}],"sol":{"4":[385,545,-10],"5":[770,190,-25],"6":[900,190,50]}},
+/*hole 51048*/{"name":"Dark star","hint":"A black hole bends light toward it, and shorter wavelengths bend more. Anything that crosses the black disc is lost. Place the mirrors where the bent beam arrives.","pieces":[{"t":"emit","x":300,"y":220,"a":110.00000000000001,"band":[420,480],"fixed":1},{"t":"bh","x":500,"y":290,"r":20,"fixed":1},{"t":"wall","x":195,"y":80,"w":30,"h":125,"a":120,"fixed":1},{"t":"mirror","x":490,"y":80,"a":-30},{"t":"mirror","x":380,"y":390,"a":-75},{"t":"mirror","x":605,"y":375,"a":30},{"t":"goal","x":950,"y":310,"band":[420,480],"r":28,"fixed":1,"need":0.6}],"sol":{"3":[225,420,55],"4":[710,410,-35],"5":[835,210,-10]}},
 /*orb 50001*/{"name":"Planetarium","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":85,"y":225,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":85,"oy":225},{"t":"wall","x":535,"y":375,"w":30,"h":250,"a":20,"fixed":1},{"t":"wall","x":310,"y":435,"w":30,"h":195,"a":165,"fixed":1},{"t":"orb","x":815,"y":280,"a":0,"r":60,"norot":1},{"t":"mirror","x":610,"y":530,"a":-60},{"t":"mirror","x":385,"y":265,"a":-15},{"t":"goal","x":850,"y":480,"band":[452.84615384615387,501],"r":17,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[395,180,0],"4":[610,80,-5],"5":[820,180,55]}},
 /*orb 50136*/{"name":"Moonstone","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":70,"y":225,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":70,"oy":225},{"t":"wall","x":80,"y":80,"w":30,"h":115,"a":120,"fixed":1},{"t":"wall","x":435,"y":160,"w":30,"h":105,"a":90,"fixed":1},{"t":"orb","x":395,"y":330,"a":0,"r":55,"norot":1},{"t":"mirror","x":180,"y":130,"a":30},{"t":"mirror","x":550,"y":190,"a":15},{"t":"goal","x":710,"y":510,"band":[460.53846153846155,493.3076923076923],"r":10,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[290,260,0],"4":[565,365,85],"5":[425,475,75]}},
 /*orb 50265*/{"name":"Bubble","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":115,"y":245,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":115,"oy":245},{"t":"wall","x":925,"y":515,"w":30,"h":125,"a":30,"fixed":1},{"t":"wall","x":775,"y":370,"w":30,"h":220,"a":30,"fixed":1},{"t":"orb","x":940,"y":270,"a":0,"r":40,"norot":1},{"t":"mirror","x":100,"y":120,"a":-60},{"t":"mirror","x":445,"y":475,"a":-30},{"t":"goal","x":755,"y":215,"band":[552.8461538461538,647.1538461538462],"r":12,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[385,215,0],"4":[565,140,35],"5":[530,305,40]}},
@@ -1715,12 +1725,12 @@ function sbxSave(){
 function sbxStart(fresh){
   let list=null;
   if(!fresh)try{list=JSON.parse(localStorage.getItem('refract-sandbox'))}catch(e){}
-  if(!Array.isArray(list)||!list.length)list=[{t:'emit',x:110,y:300,a:0,band:[400,700]},{t:'prism',x:420,y:300,a:0}];
+  if(!Array.isArray(list)||!list.length)list=[{t:'emit',x:110,y:300,a:0,band:[400,700],w:60,nb:9},{t:'bh',x:560,y:240,r:16},{t:'bh',x:720,y:400,r:12}];
   cur=-1;endless=null;
-  begin({name:'Sandbox',hint:'Open a drawer and take any piece, as many as you like. Drag a piece back onto the shelf to remove it.',pieces:list,sol:{},pol:1,coh:1,sandbox:1});
+  begin({name:'Sandbox',hint:'Open a drawer and take any piece, as many as you like, including several black holes. Drag a piece back onto the shelf to remove it.',pieces:list,sol:{},pol:1,coh:1,sandbox:1});
 }
 // ---- shelf: drawers of pieces to place; levels stock it with a fixed quantity
-const CATS=[['light','Light',['emit','goal']],['gravity','Gravity',['bh']],['mirror','Mirrors',['mirror','split','dichro']],['glass','Glass',['prism','orb']],['lens','Lenses',['lens','zlens']],['color','Color',['filter']],['pol','Polarization',['pol','hwp','pbs']],['wave','Waves',['phase']],['wall','Walls',['wall']]];
+const CATS=[['light','Light',['emit','goal']],['gravity','Black holes',['bh']],['mirror','Mirrors',['mirror','split','dichro']],['glass','Glass',['prism','orb']],['lens','Lenses',['lens','zlens']],['color','Color',['filter']],['pol','Polarization',['pol','hwp','pbs']],['wave','Waves',['phase']],['wall','Walls',['wall']]];
 const catOf=t=>{const c=CATS.find(c=>c[2].includes(t));return c?c[0]:'wall'};
 const SB_ITEMS=['emit','goal','bh','mirror','split','dichro','prism','orb','lens','concave','zlens','filter','pol','hwp','pbs','phase','wall'];
 let shelf=[],openCat=null,drag=null;

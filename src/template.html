@@ -167,12 +167,12 @@ function sbxSave(){
 function sbxStart(fresh){
   let list=null;
   if(!fresh)try{list=JSON.parse(localStorage.getItem('refract-sandbox'))}catch(e){}
-  if(!Array.isArray(list)||!list.length)list=[{t:'emit',x:110,y:300,a:0,band:[400,700]},{t:'prism',x:420,y:300,a:0}];
+  if(!Array.isArray(list)||!list.length)list=[{t:'emit',x:110,y:300,a:0,band:[400,700],w:60,nb:9},{t:'bh',x:560,y:240,r:16},{t:'bh',x:720,y:400,r:12}];
   cur=-1;endless=null;
-  begin({name:'Sandbox',hint:'Open a drawer and take any piece, as many as you like. Drag a piece back onto the shelf to remove it.',pieces:list,sol:{},pol:1,coh:1,sandbox:1});
+  begin({name:'Sandbox',hint:'Open a drawer and take any piece, as many as you like, including several black holes. Drag a piece back onto the shelf to remove it.',pieces:list,sol:{},pol:1,coh:1,sandbox:1});
 }
 // ---- shelf: drawers of pieces to place; levels stock it with a fixed quantity
-const CATS=[['light','Light',['emit','goal']],['gravity','Gravity',['bh']],['mirror','Mirrors',['mirror','split','dichro']],['glass','Glass',['prism','orb']],['lens','Lenses',['lens','zlens']],['color','Color',['filter']],['pol','Polarization',['pol','hwp','pbs']],['wave','Waves',['phase']],['wall','Walls',['wall']]];
+const CATS=[['light','Light',['emit','goal']],['gravity','Black holes',['bh']],['mirror','Mirrors',['mirror','split','dichro']],['glass','Glass',['prism','orb']],['lens','Lenses',['lens','zlens']],['color','Color',['filter']],['pol','Polarization',['pol','hwp','pbs']],['wave','Waves',['phase']],['wall','Walls',['wall']]];
 const catOf=t=>{const c=CATS.find(c=>c[2].includes(t));return c?c[0]:'wall'};
 const SB_ITEMS=['emit','goal','bh','mirror','split','dichro','prism','orb','lens','concave','zlens','filter','pol','hwp','pbs','phase','wall'];
 let shelf=[],openCat=null,drag=null;

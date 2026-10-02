@@ -61,18 +61,12 @@ const BOX=[[0,0,W,0],[W,0,W,H],[W,H,0,H],[0,H,0,0]].map(([a,b,c,d])=>({x1:a,y1:b
 const GS=wl=>1+0.3*(550-wl)/150;
 const wlOf=r=>r.wl!==undefined?r.wl:WL[r.i];
 const SUB=4;
-function bhChord(r,bhs){
-  const gs=GS(wlOf(r));
-  let nb=null,nd=1e9;
-  for(const b of bhs){const d=Math.hypot(r.x-b.x,r.y-b.y);if(d<nd){nd=d;nb=b}}
-  const rs=nb.r*gs;
-  if(nd<=rs)return {cap:1,len:0};
-  const dx=r.x-nb.x,dy=r.y-nb.y;
+// One hole's exact geodesic step of length L from ray r. Returns the end point and direction.
+function bhStep(r,b,L,gs){
+  const rs=b.r*gs,dx=r.x-b.x,dy=r.y-b.y,nd=Math.hypot(dx,dy);
   const cp=(dx*r.dx+dy*r.dy)/nd,sn=(dx*r.dy-dy*r.dx)/nd,as=Math.abs(sn);
-  let L=Math.max(5,Math.min(40,nd*0.18));
-  if(cp<0)L=Math.min(L,nd-rs+1);
   let x2,y2,dx2,dy2,cap=0;
-  if(as<0.03){x2=r.x+r.dx*L;y2=r.y+r.dy*L;dx2=r.dx;dy2=r.dy;if(Math.hypot(x2-nb.x,y2-nb.y)<=rs)cap=1}
+  if(as<0.03){x2=r.x+r.dx*L;y2=r.y+r.dy*L;dx2=r.dx;dy2=r.dy;if(Math.hypot(x2-b.x,y2-b.y)<=rs)cap=1}
   else{
     const sg=sn>0?1:-1,u0=1/nd,k=1.5*rs;
     let u=u0,w=-u0*cp/as;
@@ -84,16 +78,32 @@ function bhChord(r,bhs){
     }
     if(u<=1e-7)u=1e-7;
     const phi=Math.atan2(dy,dx)+sg*dphi,rr=1/u;
-    x2=nb.x+rr*Math.cos(phi);y2=nb.y+rr*Math.sin(phi);
+    x2=b.x+rr*Math.cos(phi);y2=b.y+rr*Math.sin(phi);
     const q=w/u,vp=1/Math.sqrt(1+q*q),vr=-q*vp;
     dx2=vr*Math.cos(phi)-sg*vp*Math.sin(phi);dy2=vr*Math.sin(phi)+sg*vp*Math.cos(phi);
   }
+  return {x2,y2,dx2,dy2,cap};
+}
+// With several holes each one's exact step is computed on its own and the bends are added,
+// so a hole dominates where it is close and the pulls combine where they are comparable.
+function bhChord(r,bhs){
+  const gs=GS(wlOf(r));
+  let L=40;
   for(const b of bhs){
-    if(b===nb)continue;
-    const bx=b.x-x2,by=b.y-y2,d=Math.hypot(bx,by),dd=bx*dx2+by*dy2,px=bx-dd*dx2,py=by-dd*dy2;
-    const f=b.r*gs*L/(d*d*d);dx2+=px*f;dy2+=py*f;
+    const dx=r.x-b.x,dy=r.y-b.y,d=Math.hypot(dx,dy),rs=b.r*gs;
+    if(d<=rs)return {cap:1,len:0};
+    L=Math.min(L,Math.max(5,d*0.18));
+    if(dx*r.dx+dy*r.dy<0)L=Math.min(L,Math.max(d-rs+1,2));
   }
-  const hl=Math.hypot(dx2,dy2);dx2/=hl;dy2/=hl;
+  const sx=r.x+r.dx*L,sy=r.y+r.dy*L;
+  let ax=0,ay=0,adx=0,ady=0,cap=0;
+  for(const b of bhs){
+    const o=bhStep(r,b,L,gs);
+    if(o.cap)cap=1;
+    ax+=o.x2-sx;ay+=o.y2-sy;adx+=o.dx2-r.dx;ady+=o.dy2-r.dy;
+  }
+  const x2=sx+ax,y2=sy+ay;
+  let dx2=r.dx+adx,dy2=r.dy+ady;const hl=Math.hypot(dx2,dy2);dx2/=hl;dy2/=hl;
   const cx=x2-r.x,cy=y2-r.y,len=Math.hypot(cx,cy);
   if(len<1e-9)return {cap:1,len:0};
   return {cap,len,cx:cx/len,cy:cy/len,x2,y2,dx2,dy2};
