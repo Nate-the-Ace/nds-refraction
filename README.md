@@ -11,6 +11,7 @@ Enable GitHub Pages on the `main` branch (root) and the game is served at
 
 ## Controls
 
+- The shelf at the bottom holds the level's movable pieces in drawers by kind (Mirrors, Glass, Lenses, Color, Polarization, Waves), with the quantity left on each. Click a piece or drag it onto the board. Drag it back onto the shelf, or press Put back, to return it.
 - Drag a piece with a blue ring to move it. Bolted pieces are fixed.
 - Drag the blue dot at the end of a piece to turn it. `Q` / `E` or the arrow keys turn it too.
 - Polarizers, waveplates, polarizing splitters and phase plates have an amber knob. Drag it around the ring to set the axis or delay.
@@ -38,7 +39,7 @@ Pieces added after the first 25 levels:
 
 **Endless** (menu): the game builds a new puzzle on the spot at one of five difficulties. The seed is shown in the title.
 
-**Sandbox** (menu): every piece, no goals. Add pieces from the bar, change colors, beam width, polarization and focal length, delete or clear. The layout is saved in the browser.
+**Sandbox** (menu): every piece in unlimited supply, no goals. Take pieces from the drawers, change colors, beam width, polarization and focal length, delete or clear. The layout is saved in the browser.
 
 Progress is saved in the browser's local storage.
 

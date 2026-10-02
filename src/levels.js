@@ -14,7 +14,7 @@ const CHAPTERS=[
 ];
 const LEVELS=[
 // ---- Chapter 1
-{name:'First light',hint:'Drag pieces with a blue ring. Bolted pieces stay put.',
+{name:'First light',hint:'Open the Mirrors drawer and drop the mirror in the beam. Turn it with the blue dot. Bolted pieces stay put.',
  pieces:[
   {t:'emit',x:100,y:300,a:0,band:RED,fixed:1},
   {t:'mirror',x:400,y:150,a:0},
