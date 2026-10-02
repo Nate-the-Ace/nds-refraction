@@ -21,6 +21,11 @@ canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;displa
 footer{justify-content:center;min-height:58px;flex-wrap:wrap}
 .grp{display:none;gap:8px;align-items:center}
 .grp.on{display:flex}
+#sbx{display:none;flex:none;flex-wrap:wrap;gap:6px;padding:6px 12px;justify-content:center;border-top:1px solid var(--line);max-height:30vh;overflow:auto}
+#sbx.on{display:flex}
+#sbx button{padding:5px 9px;font-size:13px;min-height:32px;border-radius:8px}
+#sbx .sep{width:1px;background:var(--line);margin:0 2px}
+#sbx .del{border-color:#7a3d3d}
 #over{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(6,8,12,.74);z-index:5;padding:12px}
 #over.on{display:flex}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;max-width:min(94vw,540px);width:100%;max-height:92%;overflow:auto;text-align:center}
@@ -45,6 +50,7 @@ footer{justify-content:center;min-height:58px;flex-wrap:wrap}
 <div id="stage"><canvas id="cv"></canvas>
   <div id="over"><div class="card" id="card"></div></div>
 </div>
+<div id="sbx"></div>
 <footer>
   <button id="bHint" aria-label="Show a hint">Hint</button>
   <button id="bWave" aria-label="Toggle wave animation">Waves: on</button>
@@ -65,15 +71,19 @@ function wlRGB(wl){
   return [c(r),c(g),c(b)];
 }
 const DISC={pol:1,hwp:1,phase:1};
-const DIALS={pol:{step:22.5,mod:180,name:'Axis'},hwp:{step:22.5,mod:180,name:'Axis'},pbs:{step:22.5,mod:180,name:'Axis'},phase:{step:45,mod:360,name:'Phase'}};
+const ZF=[-60,-80,-100,-130,-170,-230,-340,-600,600,340,230,170,130,100,80,60];
+const zf=p=>ZF[(Math.round(p.ax/22.5)%16+16)%16];
+const DIALS={zlens:{step:22.5,mod:360,name:'Focal'},pol:{step:22.5,mod:180,name:'Axis'},hwp:{step:22.5,mod:180,name:'Axis'},pbs:{step:22.5,mod:180,name:'Axis'},phase:{step:45,mod:360,name:'Phase'}};
 function normalize(p){
   p.a=(p.a||0)*D2R;
-  const L={mirror:100,split:100,filter:80,lens:110,pbs:90,dichro:100};
+  const L={mirror:100,split:100,filter:80,lens:110,zlens:110,pbs:90,dichro:100};
   if(L[p.t])p.len=p.len||L[p.t];
   if(p.t==='prism')p.r=p.r||60;
+  if(p.t==='orb'){p.r=p.r||50;p.norot=1}
   if(DISC[p.t]){p.r=p.r||30;p.norot=1}
   if(p.t==='goal')p.r=p.r||15;
   if(p.t==='lens'&&p.f===undefined)p.f=160;
+  if(p.t==='zlens'&&p.ax===undefined)p.ax=247.5;
   if(DIALS[p.t]&&p.ax===undefined)p.ax=0;
   if(p.t==='emit'||p.t==='filter'||p.t==='goal'||p.t==='dichro')p.band=p.band||[400,700];
   if(p.t==='emit'){p.pol=(p.pol||0);p.nb=p.w?(p.nb||9):1;p.w=p.w||0}
@@ -89,6 +99,10 @@ function segsOf(p){
   if(p.t==='prism'){
     const v=[0,1,2].map(k=>{const q=p.a+k*2*Math.PI/3;return [p.x+Math.cos(q)*p.r,p.y+Math.sin(q)*p.r]});
     return [0,1,2].map(k=>({x1:v[k][0],y1:v[k][1],x2:v[(k+1)%3][0],y2:v[(k+1)%3][1],k:'glass',p}));
+  }
+  if(p.t==='orb'){
+    const n=36,v=[];for(let k=0;k<n;k++){const q=k*2*Math.PI/n;v.push([p.x+Math.cos(q)*p.r,p.y+Math.sin(q)*p.r])}
+    return v.map((a,k)=>({x1:a[0],y1:a[1],x2:v[(k+1)%n][0],y2:v[(k+1)%n][1],k:'glass',p}));
   }
   if(p.t==='wall'){
     const hw=p.w/2,hh=p.h/2;
@@ -182,11 +196,11 @@ function trace(pieces){
       if(1-T>0.005)stack.push(mk(base,{dx:rx,dy:ry,I:r.I*(1-T),pol:p.ax*D2R+Math.PI/2}));
       continue;
     }
-    if(k==='lens'){
+    if(k==='lens'||k==='zlens'){
       const fx=-nx,fy=-ny;
       const dd=r.dx*fx+r.dy*fy,dt=r.dx*ex+r.dy*ey;
       const slope=dt/dd,h=(hx-p.x)*ex+(hy-p.y)*ey;
-      const s2=slope-h/p.f;
+      const s2=slope-h/(k==='zlens'?zf(p):p.f);
       let ux=fx+s2*ex,uy=fy+s2*ey;const ul=Math.hypot(ux,uy);ux/=ul;uy/=ul;
       stack.push(mk(base,{dx:ux,dy:uy}));continue;
     }
@@ -231,7 +245,12 @@ const CHAPTERS=[
 {name:'Lenses',intro:'A convex lens bends parallel rays toward a focus 160 units behind it. A concave lens spreads them out. Beams now have width, so a small target needs a focused beam.'},
 {name:'Polarization',intro:'Light now has a polarization angle, shown by the small badges. A polarizer passes the part of the light along its axis. A waveplate turns the polarization. A polarizing splitter sends one part straight and the other aside. Select a piece and drag the amber knob on it to set its axis.'},
 {name:'Dichroics',intro:'A dichroic mirror reflects one band of colors and lets all the others pass straight through. Unlike a filter, nothing is thrown away.'},
-{name:'Interference',intro:'Laser light is a wave. When two beams recombine, they add or cancel depending on how far each traveled. Phase plates delay a beam; drag the amber knob to set the delay. Mirrors on rails slide along the beam. Watch the waves: beams that arrive in step add up, and beams half a wave apart cancel.'}
+{name:'Interference',intro:'Laser light is a wave. When two beams recombine, they add or cancel depending on how far each traveled. Phase plates delay a beam; drag the amber knob to set the delay. Mirrors on rails slide along the beam. Watch the waves: beams that arrive in step add up, and beams half a wave apart cancel.'},
+{n:20,name:'Workshop',intro:'Every kind of optics is now in play, mixed together. New piece: the glass ball. It bends and splits light like a round prism, so where the beam strikes it decides the angle and the color. Drag it, there is nothing to turn.'},
+{n:20,name:'Studio',intro:'More pieces, more walls, tighter paths. Some pieces on the table are decoys.'},
+{n:20,name:'Laboratory',intro:'Longer chains and bigger trees. Light has to be split, sorted, polarized and focused on the way.'},
+{n:20,name:'Observatory',intro:'Several systems work at once. Count your targets before you move anything.'},
+{n:20,name:'Grand Optics',intro:'The hardest set. Everything you have learned, with little room for error.'}
 ];
 const LEVELS=[
 // ---- Chapter 1
@@ -475,7 +494,961 @@ const LEVELS=[
  sol:{11:[350,100,90,90],12:[780,500,90,225]}}
 ];
 
+// Generated by tools/gen_levels.js. Do not edit by hand.
+const GEN_LEVELS=[
+/*orb 10394*/{"name":"Planetarium","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":120,"y":245,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":120,"oy":245},{"t":"wall","x":410,"y":115,"w":30,"h":170,"a":45,"fixed":1},{"t":"orb","x":170,"y":335,"a":0,"r":55,"norot":1},{"t":"goal","x":705,"y":425,"band":[437.46153846153845,531.7692307692307],"r":12,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"2":[440,285,0]}},
+/*mz 11310*/{"name":"Out of phase","hint":"Delay an arm so the beams arrive in step at the lit port.","pieces":[{"t":"emit","x":200,"y":500,"a":0,"band":[595,605],"fixed":1},{"t":"split","x":275,"y":500,"a":-45,"fixed":1},{"t":"mirror","x":725,"y":500,"a":-45,"fixed":1},{"t":"split","x":725,"y":225,"a":-45,"fixed":1},{"t":"mirror","x":275,"y":225,"a":-45,"fixed":1},{"t":"phase","x":145,"y":405,"a":0,"ax":135},{"t":"goal","x":725,"y":120,"band":[595,605],"coh":1,"r":15,"fixed":1,"show":1,"need":0.8,"a":0}],"sol":{"5":[275,400,0,225]},"coh":1},
+/*prism 10262*/{"name":"Dispersion","hint":"Glass bends each color differently. Find the angle that sends only the target color in.","pieces":[{"t":"emit","x":80,"y":265,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":80,"oy":265},{"t":"wall","x":225,"y":475,"w":30,"h":220,"a":75,"fixed":1},{"t":"prism","x":280,"y":345,"a":60,"r":60},{"t":"goal","x":560,"y":90,"band":[445.15384615384613,501],"r":10,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"2":[335,230,85]}},
+/*zoom 11441*/{"name":"Macro","hint":"This lens squeezes to any focal length. Slide it and set its dial so the focus lands on the target.","pieces":[{"t":"emit","x":545,"y":305,"a":100,"band":[420,480],"fixed":1,"w":50,"nb":9},{"t":"wall","x":355,"y":330,"w":30,"h":235,"a":150,"fixed":1},{"t":"zlens","x":245,"y":190,"a":-60,"ax":135},{"t":"goal","x":510,"y":495,"band":[420,480],"r":9,"fixed":1,"show":1,"need":0.6}],"sol":{"2":[525,395,10,292.5]}},
+/*prism 11703*/{"name":"Crystal clear","hint":"Glass bends each color differently. Find the angle that sends only the target color in.","pieces":[{"t":"emit","x":105,"y":170,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":105,"oy":170},{"t":"wall","x":750,"y":305,"w":30,"h":225,"a":15,"fixed":1},{"t":"prism","x":240,"y":95,"a":110,"r":60},{"t":"goal","x":600,"y":330,"band":[591.3076923076924,700],"r":10,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"2":[355,200,30]}},
+/*orb 12229*/{"name":"Bead","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":95,"y":260,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":95,"oy":260},{"t":"wall","x":785,"y":415,"w":30,"h":205,"a":0,"fixed":1},{"t":"orb","x":830,"y":125,"a":0,"r":50,"norot":1},{"t":"goal","x":610,"y":445,"band":[452.84615384615387,531.7692307692307],"r":10,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"2":[335,295,0]}},
+/*focus 12358*/{"name":"Convergent","hint":"The lens focuses parallel light at its focal length behind it. Put the focus on the target.","pieces":[{"t":"emit","x":435,"y":125,"a":100,"band":[520,570],"fixed":1,"w":55,"nb":9},{"t":"wall","x":115,"y":155,"w":30,"h":185,"a":60,"fixed":1},{"t":"lens","x":175,"y":505,"a":-75,"f":160},{"t":"goal","x":395,"y":360,"band":[520,570],"r":9,"fixed":1,"show":1,"need":0.6}],"sol":{"2":[425,205,10]}},
+/*spread 10131*/{"name":"Sprinkler","hint":"A concave lens spreads light apart. Place it so the beam reaches every target.","pieces":[{"t":"emit","x":865,"y":490,"a":240,"band":[420,480],"fixed":1,"w":30,"nb":25},{"t":"wall","x":440,"y":375,"w":30,"h":165,"a":105,"fixed":1},{"t":"lens","x":680,"y":335,"a":15,"f":-90},{"t":"goal","x":620,"y":140,"band":[420,480],"r":20,"need":0.15,"show":1,"fixed":1},{"t":"goal","x":685,"y":105,"band":[420,480],"r":20,"need":0.15,"show":1,"fixed":1}],"sol":{"2":[805,380,-30]}},
+/*fan 10655*/{"name":"Chain letter","hint":"A splitter sends half the light each way. Every target needs some.","pieces":[{"t":"emit","x":735,"y":365,"a":240,"band":[620,700],"fixed":1},{"t":"wall","x":180,"y":350,"w":30,"h":200,"a":150,"fixed":1},{"t":"split","x":535,"y":505,"a":45},{"t":"goal","x":570,"y":80,"band":[620,700],"r":13,"fixed":1,"need":0.3},{"t":"goal","x":795,"y":265,"band":[620,700],"r":13,"fixed":1,"need":0.3}],"sol":{"2":[675,265,-60]}},
+/*sorter 10786*/{"name":"Palette knife","hint":"A dichroic mirror reflects its colors and passes the rest. Send each color to its own target.","pieces":[{"t":"emit","x":655,"y":355,"a":330,"band":[400,700],"fixed":1},{"t":"wall","x":185,"y":205,"w":30,"h":115,"a":135,"fixed":1},{"t":"dichro","x":635,"y":440,"a":-30,"band":[550.0461538461539,700]},{"t":"goal","x":875,"y":225,"band":[400,549.9538461538461],"r":13,"fixed":1,"ex":1,"need":0.6},{"t":"goal","x":615,"y":235,"band":[550.0461538461539,700],"r":13,"fixed":1,"ex":1,"need":0.6}],"sol":{"2":[765,290,85]}},
+/*spread 11572*/{"name":"Wide angle","hint":"A concave lens spreads light apart. Place it so the beam reaches every target.","pieces":[{"t":"emit","x":915,"y":405,"a":190,"band":[420,480],"fixed":1,"w":30,"nb":25},{"t":"wall","x":520,"y":175,"w":30,"h":175,"a":45,"fixed":1},{"t":"lens","x":315,"y":480,"a":45,"f":-90},{"t":"goal","x":510,"y":375,"band":[420,480],"r":20,"need":0.15,"show":1,"fixed":1},{"t":"goal","x":520,"y":300,"band":[420,480],"r":20,"need":0.15,"show":1,"fixed":1}],"sol":{"2":[825,390,-80]}},
+/*zoom 10000*/{"name":"Telephoto","hint":"This lens squeezes to any focal length. Slide it and set its dial so the focus lands on the target.","pieces":[{"t":"emit","x":385,"y":225,"a":90,"band":[620,700],"fixed":1,"w":70,"nb":9},{"t":"wall","x":415,"y":95,"w":30,"h":240,"a":60,"fixed":1},{"t":"mirror","x":660,"y":445,"a":60},{"t":"zlens","x":210,"y":370,"a":-60,"ax":247.5},{"t":"goal","x":215,"y":285,"band":[620,700],"r":7,"fixed":1,"show":1,"need":0.6}],"sol":{"2":[385,430,-25],"3":[385,315,0,202.5]}},
+/*focus 10917*/{"name":"Bullseye","hint":"The lens focuses parallel light at its focal length behind it. Put the focus on the target.","pieces":[{"t":"emit","x":385,"y":475,"a":280,"band":[620,700],"fixed":1,"w":70,"nb":9},{"t":"wall","x":710,"y":120,"w":30,"h":150,"a":60,"fixed":1},{"t":"mirror","x":165,"y":330,"a":75},{"t":"lens","x":905,"y":170,"a":0,"f":160},{"t":"goal","x":665,"y":265,"band":[620,700],"r":7,"fixed":1,"show":1,"need":0.4}],"sol":{"2":[420,265,-40],"3":[505,265,90]}},
+/*polchain 11048*/{"name":"Twist and shout","hint":"The beam must pass the last polarizer. Turn the axes in small steps.","pieces":[{"t":"emit","x":385,"y":160,"a":30,"band":[595,605],"fixed":1,"pol":135},{"t":"pol","x":734.8630372902487,"y":132.08638386440492,"a":0,"ax":45,"fixed":1},{"t":"wall","x":200,"y":405,"w":30,"h":225,"a":15,"fixed":1},{"t":"mirror","x":795,"y":380,"a":75},{"t":"pol","x":430,"y":455,"a":0,"ax":22.5,"r":30},{"t":"goal","x":800,"y":75,"band":[595,605],"r":15,"fixed":1,"show":1,"need":0.15}],"sol":{"3":[570,270,-5],"4":[450,200,0,0]},"pol":1},
+/*orb 11834*/{"name":"Globe trotter","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":95,"y":160,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":95,"oy":160},{"t":"wall","x":140,"y":340,"w":30,"h":210,"a":30,"fixed":1},{"t":"orb","x":430,"y":210,"a":0,"r":60,"norot":1},{"t":"mirror","x":285,"y":390,"a":-60},{"t":"goal","x":625,"y":60,"band":[522.0769230769231,601],"r":12,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"2":[320,205,0],"3":[590,325,-25]}},
+/*relay 11965*/{"name":"Long way round","hint":"Bounce the beam around the walls and into the target.","pieces":[{"t":"emit","x":465,"y":525,"a":270,"band":[520,570],"fixed":1},{"t":"wall","x":195,"y":75,"w":30,"h":240,"a":105,"fixed":1},{"t":"mirror","x":160,"y":395,"a":0},{"t":"mirror","x":135,"y":130,"a":-45},{"t":"goal","x":210,"y":195,"band":[520,570],"r":13,"fixed":1,"need":0.6}],"sol":{"2":[465,350,35],"3":[290,415,25]}},
+/*orb 12494*/{"name":"Snow globe","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":105,"y":420,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":105,"oy":420},{"t":"wall","x":540,"y":485,"w":30,"h":240,"a":75,"fixed":1},{"t":"orb","x":505,"y":265,"a":0,"r":40,"norot":1},{"t":"mirror","x":330,"y":250,"a":15},{"t":"goal","x":245,"y":255,"band":[437.46153846153845,524.0769230769231],"r":12,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"2":[365,395,0],"3":[520,345,85]}},
+/*polsplit 11179*/{"name":"Axis of evil","hint":"A polarizing splitter divides light by polarization. Balance the halves.","pieces":[{"t":"emit","x":815,"y":310,"a":210,"band":[595,605],"fixed":1,"pol":135},{"t":"wall","x":175,"y":285,"w":30,"h":135,"a":45,"fixed":1},{"t":"pbs","x":315,"y":195,"a":75,"ax":0},{"t":"hwp","x":720,"y":460,"a":0,"ax":157.5,"r":30},{"t":"goal","x":380,"y":60,"band":[595,605],"r":15,"fixed":1,"show":1,"need":0.3},{"t":"goal","x":400,"y":270,"band":[595,605],"r":15,"fixed":1,"show":1,"need":0.3}],"sol":{"2":[615,195,5,45],"3":[695,240,0,112.5]},"pol":1},
+/*fan 12096*/{"name":"Splitting hairs","hint":"A splitter sends half the light each way. Every target needs some.","pieces":[{"t":"emit","x":470,"y":105,"a":160,"band":[595,605],"fixed":1},{"t":"wall","x":910,"y":305,"w":30,"h":155,"a":15,"fixed":1},{"t":"mirror","x":125,"y":235,"a":60},{"t":"split","x":800,"y":485,"a":-45},{"t":"goal","x":55,"y":505,"band":[595,605],"r":13,"fixed":1,"need":0.3},{"t":"goal","x":295,"y":355,"band":[595,605],"r":13,"fixed":1,"need":0.3}],"sol":{"2":[240,190,-40],"3":[125,385,55]}},
+/*relay 10524*/{"name":"Ricochet","hint":"Bounce the beam around the walls and into the target.","pieces":[{"t":"emit","x":860,"y":285,"a":240,"band":[420,480],"fixed":1},{"t":"wall","x":145,"y":330,"w":30,"h":220,"a":30,"fixed":1},{"t":"mirror","x":235,"y":505,"a":60},{"t":"mirror","x":255,"y":160,"a":45},{"t":"mirror","x":480,"y":60,"a":-30},{"t":"goal","x":760,"y":215,"band":[420,480],"r":20,"fixed":1,"need":0.6}],"sol":{"2":[750,90,15],"3":[520,225,-65],"4":[545,395,20]}},
+/*prism 20262*/{"name":"Rainbow chase","hint":"Glass bends each color differently. Find the angle that sends only the target color in.","pieces":[{"t":"emit","x":90,"y":380,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":90,"oy":380},{"t":"wall","x":710,"y":210,"w":30,"h":115,"a":150,"fixed":1},{"t":"prism","x":590,"y":185,"a":40,"r":60},{"t":"goal","x":575,"y":535,"band":[445.15384615384613,485.61538461538464],"r":10,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"2":[390,375,30]}},
+/*orb 20393*/{"name":"Raindrop","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":115,"y":240,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":115,"oy":240},{"t":"wall","x":695,"y":150,"w":30,"h":155,"a":135,"fixed":1},{"t":"orb","x":665,"y":375,"a":0,"r":60,"norot":1},{"t":"goal","x":675,"y":465,"band":[483.61538461538464,570.2307692307693],"r":12,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"2":[420,290,0]}},
+/*orb 22229*/{"name":"Water drop","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":90,"y":370,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":90,"oy":370},{"t":"wall","x":520,"y":240,"w":30,"h":230,"a":45,"fixed":1},{"t":"orb","x":570,"y":310,"a":0,"r":55,"norot":1},{"t":"goal","x":535,"y":555,"band":[468.2307692307692,547.1538461538462],"r":10,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"2":[330,415,0]}},
+/*orb 22360*/{"name":"Fisheye","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":100,"y":190,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":100,"oy":190},{"t":"wall","x":535,"y":500,"w":30,"h":130,"a":105,"fixed":1},{"t":"orb","x":250,"y":225,"a":0,"r":60,"norot":1},{"t":"goal","x":530,"y":430,"band":[483.61538461538464,508.6923076923077],"r":14,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"2":[385,245,0]}},
+/*orb 22489*/{"name":"Sea glass","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":70,"y":275,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":70,"oy":275},{"t":"wall","x":760,"y":160,"w":30,"h":250,"a":165,"fixed":1},{"t":"orb","x":240,"y":470,"a":0,"r":55,"norot":1},{"t":"goal","x":495,"y":75,"band":[468.2307692307692,539.4615384615385],"r":10,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"2":[275,230,0]}},
+/*spread 20131*/{"name":"Diverge","hint":"A concave lens spreads light apart. Place it so the beam reaches every target.","pieces":[{"t":"emit","x":845,"y":445,"a":190,"band":[420,480],"fixed":1,"w":30,"nb":25},{"t":"wall","x":510,"y":520,"w":30,"h":120,"a":90,"fixed":1},{"t":"lens","x":140,"y":445,"a":-15,"f":-110},{"t":"goal","x":420,"y":405,"band":[420,480],"r":20,"need":0.15,"show":1,"fixed":1},{"t":"goal","x":430,"y":340,"band":[420,480],"r":20,"need":0.15,"show":1,"fixed":1}],"sol":{"2":[740,430,-80]}},
+/*mich 21703*/{"name":"Interference slide","hint":"Slide the mirrors along their rails until the detector lights up.","pieces":[{"t":"emit","x":75,"y":325,"a":0,"band":[595,605],"fixed":1},{"t":"split","x":275,"y":325,"a":-45,"fixed":1},{"t":"phase","x":387.5,"y":325,"a":0,"ax":180,"fixed":1},{"t":"mirror","x":475,"y":325,"a":90,"rail":0,"range":150,"norot":1},{"t":"mirror","x":275,"y":290,"a":0,"rail":-90,"range":150,"norot":1},{"t":"goal","x":275,"y":500,"band":[595,605],"coh":1,"r":15,"need":0.8,"show":1,"fixed":1,"a":0}],"sol":{"3":[400,325,90],"4":[275,200,0]},"coh":1},
+/*spread 21965*/{"name":"Fan out","hint":"A concave lens spreads light apart. Place it so the beam reaches every target.","pieces":[{"t":"emit","x":685,"y":265,"a":160,"band":[520,570],"fixed":1,"w":30,"nb":25},{"t":"wall","x":500,"y":210,"w":30,"h":155,"a":45,"fixed":1},{"t":"lens","x":675,"y":170,"a":30,"f":-140},{"t":"goal","x":210,"y":470,"band":[520,570],"r":20,"need":0.15,"show":1,"fixed":1},{"t":"goal","x":190,"y":410,"band":[520,570],"r":20,"need":0.2,"show":1,"fixed":1}],"sol":{"2":[570,305,70]}},
+/*focus 22096*/{"name":"Laser pointer","hint":"The lens focuses parallel light at its focal length behind it. Put the focus on the target.","pieces":[{"t":"emit","x":535,"y":505,"a":210,"band":[620,700],"fixed":1,"w":40,"nb":9},{"t":"wall","x":655,"y":370,"w":30,"h":175,"a":0,"fixed":1},{"t":"mirror","x":880,"y":175,"a":30},{"t":"lens","x":340,"y":490,"a":-45,"f":120},{"t":"goal","x":370,"y":175,"band":[620,700],"r":7,"fixed":1,"show":1,"need":0.6}],"sol":{"2":[370,405,60],"3":[370,295,0]}},
+/*pinhole 21179*/{"name":"Single slit","hint":"Focus the beam through the gap, then straighten it out again.","pieces":[{"t":"emit","x":510,"y":155,"a":140,"band":[420,480],"fixed":1,"w":85,"nb":11},{"t":"wall","x":282,"y":217,"w":30,"h":170,"a":140,"fixed":1},{"t":"wall","x":411,"y":370,"w":30,"h":170,"a":140,"fixed":1},{"t":"lens","x":335,"y":510,"a":0,"f":115},{"t":"lens","x":845,"y":350,"a":90,"f":130},{"t":"goal","x":160,"y":450,"band":[420,480],"r":30,"fixed":1,"show":1,"need":0.3}],"sol":{"3":[435,220,50],"4":[245,375,50]}},
+/*mz 21572*/{"name":"Twin arms","hint":"Delay one arm so the right port lights and the other stays dark.","pieces":[{"t":"emit","x":300,"y":75,"a":0,"band":[595,605],"fixed":1},{"t":"split","x":325,"y":75,"a":45,"fixed":1},{"t":"mirror","x":750,"y":75,"a":45,"fixed":1},{"t":"split","x":750,"y":300,"a":45,"fixed":1},{"t":"mirror","x":325,"y":300,"a":45,"fixed":1},{"t":"phase","x":675,"y":145,"a":0,"ax":225},{"t":"phase","x":200,"y":285,"a":0,"ax":225},{"t":"goal","x":950,"y":300,"band":[595,605],"coh":1,"r":15,"fixed":1,"show":1,"dark":1},{"t":"goal","x":750,"y":405,"band":[595,605],"coh":1,"r":15,"fixed":1,"show":1,"need":0.8}],"sol":{"5":[575,75,0,315],"6":[450,300,0,135]},"coh":1},
+/*zoom 20000*/{"name":"Bellows","hint":"This lens squeezes to any focal length. Slide it and set its dial so the focus lands on the target.","pieces":[{"t":"emit","x":700,"y":430,"a":180,"band":[420,480],"fixed":1,"w":55,"nb":9},{"t":"wall","x":890,"y":445,"w":30,"h":155,"a":90,"fixed":1},{"t":"mirror","x":645,"y":515,"a":-30},{"t":"mirror","x":195,"y":485,"a":75},{"t":"zlens","x":880,"y":200,"a":60,"ax":180},{"t":"goal","x":755,"y":275,"band":[420,480],"r":7,"fixed":1,"show":1,"need":0.6}],"sol":{"2":[515,430,50],"3":[555,205,-30],"4":[535,330,10,202.5]}},
+/*fan 20655*/{"name":"Hydra","hint":"A splitter sends half the light each way. Every target needs some.","pieces":[{"t":"emit","x":440,"y":260,"a":330,"band":[520,570],"fixed":1},{"t":"wall","x":435,"y":535,"w":30,"h":185,"a":90,"fixed":1},{"t":"wall","x":570,"y":550,"w":30,"h":165,"a":90,"fixed":1},{"t":"split","x":80,"y":230,"a":-60},{"t":"mirror","x":870,"y":140,"a":90},{"t":"goal","x":725,"y":95,"band":[520,570],"r":13,"fixed":1,"need":0.3},{"t":"goal","x":760,"y":290,"band":[520,570],"r":13,"fixed":1,"need":0.3}],"sol":{"3":[615,160,35],"4":[585,325,45]}},
+/*focus 21048*/{"name":"Ignition","hint":"The lens focuses parallel light at its focal length behind it. Put the focus on the target.","pieces":[{"t":"emit","x":740,"y":460,"a":190,"band":[620,700],"fixed":1,"w":45,"nb":9},{"t":"wall","x":180,"y":280,"w":30,"h":120,"a":75,"fixed":1},{"t":"mirror","x":910,"y":280,"a":0},{"t":"mirror","x":530,"y":405,"a":-30},{"t":"lens","x":65,"y":95,"a":0,"f":160},{"t":"goal","x":325,"y":350,"band":[620,700],"r":7,"fixed":1,"show":1,"need":0.6}],"sol":{"2":[510,420,50],"3":[510,190,25],"4":[450,245,50]}},
+/*polchain 21310*/{"name":"Gradual turn","hint":"The beam must pass the last polarizer. Turn the axes in small steps.","pieces":[{"t":"emit","x":705,"y":445,"a":240,"band":[595,605],"fixed":1,"pol":135},{"t":"pol","x":871.4152579741184,"y":408.8864255068648,"a":0,"ax":45,"fixed":1},{"t":"wall","x":255,"y":440,"w":30,"h":165,"a":45,"fixed":1},{"t":"mirror","x":925,"y":340,"a":0},{"t":"mirror","x":740,"y":365,"a":-75},{"t":"pol","x":865,"y":195,"a":0,"ax":135,"r":30},{"t":"goal","x":900,"y":490,"band":[595,605],"r":15,"fixed":1,"show":1,"need":0.15}],"sol":{"3":[585,240,-60],"4":[810,240,35],"5":[625,310,0,0]},"pol":1},
+/*zoom 21834*/{"name":"Rubber lens","hint":"This lens squeezes to any focal length. Slide it and set its dial so the focus lands on the target.","pieces":[{"t":"emit","x":150,"y":365,"a":240,"band":[520,570],"fixed":1,"w":55,"nb":9},{"t":"wall","x":265,"y":296,"w":30,"h":255,"a":-30,"fixed":1},{"t":"mirror","x":450,"y":480,"a":60},{"t":"mirror","x":690,"y":290,"a":75},{"t":"zlens","x":530,"y":195,"a":90,"ax":247.5},{"t":"goal","x":405,"y":210,"band":[520,570],"r":9,"fixed":1,"show":1,"need":0.6}],"sol":{"2":[55,205,-80],"3":[230,60,0],"4":[310,125,-50,270]}},
+/*combine 20917*/{"name":"Blend","hint":"Merge the beams so every color passes through the slot.","pieces":[{"t":"emit","x":550,"y":415,"a":250,"band":[520,570],"fixed":1},{"t":"emit","x":250,"y":395,"a":340,"band":[420,480],"fixed":1},{"t":"wall","x":632,"y":428,"w":30,"h":185,"a":60,"fixed":1},{"t":"wall","x":870,"y":290,"w":30,"h":185,"a":60,"fixed":1},{"t":"dichro","x":765,"y":155,"a":60,"band":[420,480]},{"t":"mirror","x":715,"y":255,"a":0},{"t":"mirror","x":480,"y":255,"a":-75},{"t":"goal","x":805,"y":455,"r":16,"fixed":1,"bands":[[520,570],[420,480]],"need":0.6}],"sol":{"4":[510,300,-65],"5":[460,160,-45],"6":[685,245,40]}},
+/*polsplit 21441*/{"name":"Lopsided","hint":"A polarizing splitter divides light by polarization. Balance the halves.","pieces":[{"t":"emit","x":900,"y":95,"a":120,"band":[595,605],"fixed":1,"pol":90},{"t":"wall","x":495,"y":290,"w":30,"h":105,"a":150,"fixed":1},{"t":"pbs","x":600,"y":495,"a":30,"ax":135},{"t":"hwp","x":760,"y":420,"a":0,"ax":45,"r":30},{"t":"mirror","x":690,"y":70,"a":45},{"t":"goal","x":380,"y":525,"band":[595,605],"r":15,"fixed":1,"show":1,"need":0.3},{"t":"goal","x":940,"y":495,"band":[595,605],"r":15,"fixed":1,"show":1,"need":0.3}],"sol":{"2":[780,300,85,90],"3":[830,220,0,112.5],"4":[650,525,-30]},"pol":1},
+/*relay 20524*/{"name":"Track team","hint":"A mirror on a rail slides but cannot turn. Slide it into the beam.","pieces":[{"t":"emit","x":670,"y":220,"a":160,"band":[620,700],"fixed":1},{"t":"wall","x":875,"y":460,"w":30,"h":125,"a":75,"fixed":1},{"t":"wall","x":735,"y":285,"w":30,"h":130,"a":30,"fixed":1},{"t":"mirror","x":170,"y":485,"a":-30},{"t":"mirror","x":590,"y":515,"a":-30},{"t":"mirror","x":905,"y":315,"a":60},{"t":"mirror","x":160,"y":246,"a":85,"rail":220,"range":150,"norot":1},{"t":"goal","x":350,"y":405,"band":[620,700],"r":13,"fixed":1,"need":0.6}],"sol":{"3":[525,270,45],"4":[580,125,60],"5":[435,100,-20],"6":[251.9,323.1,85]}},
+/*sorter 20786*/{"name":"Dichroic maze","hint":"A dichroic mirror reflects its colors and passes the rest. Send each color to its own target.","pieces":[{"t":"emit","x":80,"y":305,"a":330,"band":[400,700],"fixed":1},{"t":"wall","x":466,"y":306,"w":30,"h":210,"a":0,"fixed":1},{"t":"wall","x":640,"y":460,"w":30,"h":170,"a":105,"fixed":1},{"t":"dichro","x":625,"y":360,"a":45,"band":[603.8923076923077,700]},{"t":"mirror","x":815,"y":115,"a":-45},{"t":"dichro","x":925,"y":100,"a":30,"band":[400,503.8]},{"t":"mirror","x":930,"y":470,"a":60},{"t":"goal","x":750,"y":305,"band":[503.89230769230767,603.8],"r":20,"fixed":1,"ex":1,"need":0.6},{"t":"goal","x":655,"y":110,"band":[400,503.8],"r":20,"fixed":1,"ex":1,"need":0.6},{"t":"goal","x":90,"y":490,"band":[603.8923076923077,700],"r":20,"fixed":1,"ex":1,"need":0.6}],"sol":{"3":[220,225,15],"4":[415,110,0],"5":[615,230,-20],"6":[325,405,-70]}},
+/*mich 31703*/{"name":"Tuning fork","hint":"Slide the mirrors along their rails until the detector lights up.","pieces":[{"t":"emit","x":150,"y":275,"a":0,"band":[595,605],"fixed":1},{"t":"split","x":300,"y":275,"a":45,"fixed":1},{"t":"phase","x":300,"y":375,"a":0,"ax":135,"fixed":1},{"t":"mirror","x":525,"y":275,"a":90,"rail":0,"range":150,"norot":1},{"t":"mirror","x":300,"y":275,"a":0,"rail":90,"range":150,"norot":1},{"t":"goal","x":300,"y":75,"band":[595,605],"coh":1,"r":15,"need":0.8,"show":1,"fixed":1}],"sol":{"3":[450,275,90],"4":[300,325,0]},"coh":1},
+/*spread 30131*/{"name":"Spread thin","hint":"A concave lens spreads light apart. Place it so the beam reaches every target.","pieces":[{"t":"emit","x":615,"y":510,"a":300,"band":[520,570],"fixed":1,"w":30,"nb":25},{"t":"wall","x":450,"y":485,"w":30,"h":185,"a":165,"fixed":1},{"t":"wall","x":90,"y":450,"w":30,"h":235,"a":150,"fixed":1},{"t":"lens","x":840,"y":465,"a":60,"f":-60},{"t":"goal","x":770,"y":130,"band":[520,570],"r":20,"need":0.1,"show":1,"fixed":1},{"t":"goal","x":870,"y":190,"band":[520,570],"r":20,"need":0.1,"show":1,"fixed":1}],"sol":{"3":[660,435,30]}},
+/*spread 31966*/{"name":"Adjustable","hint":"Squeeze the lens to the right strength and slide it until the beam reaches every target.","pieces":[{"t":"emit","x":330,"y":90,"a":10,"band":[420,480],"fixed":1,"w":30,"nb":25},{"t":"wall","x":335,"y":545,"w":30,"h":215,"a":105,"fixed":1},{"t":"wall","x":185,"y":260,"w":30,"h":240,"a":15,"fixed":1},{"t":"zlens","x":395,"y":400,"a":-30,"ax":135},{"t":"goal","x":825,"y":115,"band":[420,480],"r":32,"need":0.1,"show":1,"fixed":1},{"t":"goal","x":805,"y":230,"band":[420,480],"r":32,"need":0.15,"show":1,"fixed":1}],"sol":{"3":[410,100,-80,22.5]}},
+/*prism 30263*/{"name":"Glass wedge","hint":"Glass bends each color differently. Find the angle that sends only the target color in.","pieces":[{"t":"emit","x":85,"y":400,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":85,"oy":400},{"t":"wall","x":105,"y":265,"w":30,"h":150,"a":60,"fixed":1},{"t":"wall","x":910,"y":70,"w":30,"h":150,"a":75,"fixed":1},{"t":"prism","x":600,"y":475,"a":60,"r":60},{"t":"mirror","x":380,"y":165,"a":90},{"t":"goal","x":625,"y":265,"band":[591.3076923076924,685.6153846153846],"r":12,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[395,425,30],"4":[600,535,-25]}},
+/*mz 31572*/{"name":"Null result","hint":"Delay one arm so the right port lights and the other stays dark.","pieces":[{"t":"emit","x":200,"y":500,"a":0,"band":[595,605],"fixed":1},{"t":"split","x":225,"y":500,"a":-45,"fixed":1},{"t":"mirror","x":750,"y":500,"a":-45,"fixed":1},{"t":"split","x":750,"y":225,"a":-45,"fixed":1},{"t":"mirror","x":225,"y":225,"a":-45,"fixed":1},{"t":"phase","x":225,"y":300,"a":0,"ax":180,"fixed":1},{"t":"phase","x":625,"y":500,"a":0,"ax":225,"fixed":1},{"t":"phase","x":710,"y":410,"a":0,"ax":315},{"t":"phase","x":910,"y":160,"a":0,"ax":135},{"t":"goal","x":950,"y":225,"band":[595,605],"coh":1,"r":15,"fixed":1,"show":1,"need":0.8,"a":0},{"t":"goal","x":750,"y":120,"band":[595,605],"coh":1,"r":15,"fixed":1,"show":1,"dark":1,"a":0}],"sol":{"7":[350,225,0,225],"8":[475,225,0,180]},"coh":1},
+/*orb 32489*/{"name":"Ball bearing","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":70,"y":275,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":70,"oy":275},{"t":"wall","x":90,"y":475,"w":30,"h":125,"a":90,"fixed":1},{"t":"wall","x":365,"y":325,"w":30,"h":200,"a":90,"fixed":1},{"t":"orb","x":670,"y":270,"a":0,"r":60,"norot":1},{"t":"mirror","x":185,"y":185,"a":15},{"t":"goal","x":650,"y":55,"band":[437.46153846153845,485.61538461538464],"r":17,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[255,225,0],"4":[475,60,-25]}},
+/*zoom 30000*/{"name":"Rack focus","hint":"This lens squeezes to any focal length. Slide it and set its dial so the focus lands on the target.","pieces":[{"t":"emit","x":340,"y":490,"a":350,"band":[620,700],"fixed":1,"w":45,"nb":9},{"t":"wall","x":795,"y":520,"w":30,"h":105,"a":15,"fixed":1},{"t":"wall","x":75,"y":385,"w":30,"h":105,"a":30,"fixed":1},{"t":"mirror","x":415,"y":60,"a":90},{"t":"mirror","x":245,"y":215,"a":15},{"t":"zlens","x":535,"y":185,"a":-45,"ax":135},{"t":"goal","x":845,"y":305,"band":[620,700],"r":9,"fixed":1,"show":1,"need":0.6}],"sol":{"3":[550,455,-40],"4":[620,265,-30],"5":[720,280,-80,270]}},
+/*orb 30393*/{"name":"Glass eye","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":70,"y":330,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":70,"oy":330},{"t":"wall","x":725,"y":70,"w":30,"h":105,"a":135,"fixed":1},{"t":"wall","x":205,"y":125,"w":30,"h":205,"a":150,"fixed":1},{"t":"orb","x":785,"y":245,"a":0,"r":50,"norot":1},{"t":"mirror","x":505,"y":130,"a":15},{"t":"mirror","x":415,"y":75,"a":15},{"t":"goal","x":775,"y":315,"band":[483.61538461538464,531.7692307692307],"r":10,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[265,360,0],"4":[495,440,-30],"5":[505,235,-35]}},
+/*zoom 31834*/{"name":"Eyepiece","hint":"This lens squeezes to any focal length. Slide it and set its dial so the focus lands on the target.","pieces":[{"t":"emit","x":290,"y":475,"a":310,"band":[520,570],"fixed":1,"w":65,"nb":9},{"t":"wall","x":135,"y":120,"w":30,"h":170,"a":135,"fixed":1},{"t":"wall","x":125,"y":440,"w":30,"h":160,"a":90,"fixed":1},{"t":"mirror","x":490,"y":430,"a":75},{"t":"mirror","x":315,"y":115,"a":60},{"t":"zlens","x":875,"y":130,"a":45,"ax":112.5},{"t":"goal","x":405,"y":515,"band":[520,570],"r":7,"fixed":1,"show":1,"need":0.6}],"sol":{"3":[430,310,0],"4":[605,515,-65],"5":[505,515,90,292.5]}},
+/*orb 32227*/{"name":"Glass ball","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":100,"y":405,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":100,"oy":405},{"t":"wall","x":220,"y":165,"w":30,"h":165,"a":15,"fixed":1},{"t":"wall","x":455,"y":110,"w":30,"h":165,"a":15,"fixed":1},{"t":"orb","x":930,"y":280,"a":0,"r":55,"norot":1},{"t":"mirror","x":140,"y":65,"a":45},{"t":"mirror","x":60,"y":215,"a":90},{"t":"goal","x":805,"y":440,"band":[545.1538461538462,593.3076923076924],"r":10,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[370,445,0],"4":[595,540,-30],"5":[585,300,-30]}},
+/*orb 32359*/{"name":"Bauble","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":100,"y":275,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":100,"oy":275},{"t":"wall","x":775,"y":485,"w":30,"h":180,"a":165,"fixed":1},{"t":"wall","x":900,"y":325,"w":30,"h":210,"a":45,"fixed":1},{"t":"orb","x":530,"y":450,"a":0,"r":50,"norot":1},{"t":"mirror","x":60,"y":505,"a":75},{"t":"mirror","x":290,"y":265,"a":45},{"t":"goal","x":690,"y":110,"band":[460.53846153846155,493.3076923076923],"r":12,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[290,240,0],"4":[550,100,20],"5":[590,260,10]}},
+/*combine 30917*/{"name":"Through the slit","hint":"Merge the beams so every color passes through the slot.","pieces":[{"t":"emit","x":295,"y":460,"a":10,"band":[420,480],"fixed":1},{"t":"emit","x":440,"y":210,"a":100,"band":[520,570],"fixed":1},{"t":"wall","x":571,"y":483,"w":30,"h":190,"a":10,"fixed":1},{"t":"wall","x":617,"y":222,"w":30,"h":190,"a":10,"fixed":1},{"t":"wall","x":805,"y":230,"w":30,"h":100,"a":45,"fixed":1},{"t":"dichro","x":815,"y":400,"a":90,"band":[520,570]},{"t":"mirror","x":325,"y":200,"a":90},{"t":"mirror","x":940,"y":60,"a":60},{"t":"goal","x":705,"y":370,"r":16,"fixed":1,"bands":[[420,480],[520,570]],"need":0.6}],"sol":{"5":[395,480,55],"6":[520,500,-50],"7":[455,330,-50]}},
+/*pinhole 31179*/{"name":"Eye of the needle","hint":"Focus the beam through the gap, then straighten it out again.","pieces":[{"t":"emit","x":150,"y":105,"a":30,"band":[520,570],"fixed":1,"w":60,"nb":11},{"t":"wall","x":283,"y":292,"w":30,"h":165,"a":30,"fixed":1},{"t":"wall","x":381,"y":123,"w":30,"h":165,"a":30,"fixed":1},{"t":"wall","x":765,"y":120,"w":30,"h":220,"a":150,"fixed":1},{"t":"lens","x":110,"y":355,"a":30,"f":135},{"t":"lens","x":180,"y":290,"a":45,"f":125},{"t":"mirror","x":415,"y":385,"a":30},{"t":"goal","x":690,"y":185,"band":[520,570],"r":30,"fixed":1,"show":1,"need":0.5}],"sol":{"4":[215,140,-60],"5":[440,270,-60],"6":[560,340,-10]}},
+/*focus 31048*/{"name":"Hot spot","hint":"The lens focuses parallel light at its focal length behind it. Put the focus on the target.","pieces":[{"t":"emit","x":370,"y":255,"a":50,"band":[620,700],"fixed":1,"w":55,"nb":9},{"t":"wall","x":210,"y":400,"w":30,"h":235,"a":45,"fixed":1},{"t":"wall","x":900,"y":265,"w":30,"h":145,"a":90,"fixed":1},{"t":"mirror","x":590,"y":295,"a":-75},{"t":"mirror","x":275,"y":505,"a":-45},{"t":"mirror","x":860,"y":495,"a":60},{"t":"lens","x":405,"y":535,"a":-45,"f":120},{"t":"goal","x":590,"y":65,"band":[620,700],"r":7,"fixed":1,"show":1,"need":0.6}],"sol":{"3":[510,420,-5],"4":[590,275,75],"5":[365,145,-85],"6":[480,105,70]}},
+/*focus 32099*/{"name":"Pinpoint","hint":"The lens focuses parallel light at its focal length behind it. Put the focus on the target.","pieces":[{"t":"emit","x":545,"y":245,"a":260,"band":[520,570],"fixed":1,"w":55,"nb":9},{"t":"wall","x":622,"y":318,"w":30,"h":330,"a":45,"fixed":1},{"t":"wall","x":270,"y":195,"w":30,"h":180,"a":75,"fixed":1},{"t":"mirror","x":215,"y":475,"a":30},{"t":"mirror","x":830,"y":150,"a":75},{"t":"mirror","x":420,"y":80,"a":45},{"t":"lens","x":120,"y":360,"a":-30,"f":160},{"t":"goal","x":720,"y":410,"band":[520,570],"r":7,"fixed":1,"show":1,"need":0.3}],"sol":{"3":[515,70,-50],"4":[740,70,20],"5":[860,170,80],"6":[800,275,30]}},
+/*polchain 31310*/{"name":"Stepping stones","hint":"The beam must pass the last polarizer. Turn the axes in small steps.","pieces":[{"t":"emit","x":160,"y":340,"a":340,"band":[595,605],"fixed":1,"pol":157.5},{"t":"pol","x":700.960860811162,"y":307.70112224358775,"a":0,"ax":67.5,"fixed":1},{"t":"wall","x":235,"y":190,"w":30,"h":110,"a":165,"fixed":1},{"t":"wall","x":570,"y":95,"w":30,"h":205,"a":45,"fixed":1},{"t":"mirror","x":350,"y":490,"a":-30},{"t":"mirror","x":405,"y":215,"a":60},{"t":"mirror","x":930,"y":360,"a":60},{"t":"pol","x":390,"y":100,"a":0,"ax":67.5,"r":30},{"t":"pol","x":560,"y":425,"a":0,"ax":90,"r":30},{"t":"goal","x":775,"y":350,"band":[595,605],"r":15,"fixed":1,"show":1,"need":0.25}],"sol":{"4":[370,265,20],"5":[490,470,-5],"6":[575,235,-20],"7":[295,295,0,7.5],"8":[445,400,0,37.5]},"pol":1},
+/*fan 30655*/{"name":"Divide and light","hint":"A splitter sends half the light each way. Every target needs some.","pieces":[{"t":"emit","x":335,"y":465,"a":300,"band":[420,480],"fixed":1},{"t":"wall","x":660,"y":530,"w":30,"h":175,"a":105,"fixed":1},{"t":"wall","x":875,"y":270,"w":30,"h":205,"a":0,"fixed":1},{"t":"split","x":570,"y":390,"a":15},{"t":"mirror","x":95,"y":455,"a":30},{"t":"split","x":70,"y":250,"a":45},{"t":"mirror","x":285,"y":390,"a":-15},{"t":"goal","x":655,"y":190,"band":[420,480],"r":13,"fixed":1,"need":0.3},{"t":"goal","x":675,"y":425,"band":[420,480],"r":13,"fixed":1,"need":0.15},{"t":"goal","x":780,"y":115,"band":[420,480],"r":13,"fixed":1,"need":0.15}],"sol":{"3":[415,325,-35],"4":[530,120,-15],"5":[640,285,-30],"6":[770,260,55]}},
+/*relay 30524*/{"name":"Shuttle","hint":"A mirror on a rail slides but cannot turn. Slide it into the beam.","pieces":[{"t":"emit","x":400,"y":395,"a":20,"band":[420,480],"fixed":1},{"t":"wall","x":262,"y":280,"w":30,"h":250,"a":-140,"fixed":1},{"t":"wall","x":920,"y":360,"w":30,"h":140,"a":30,"fixed":1},{"t":"mirror","x":425,"y":260,"a":90},{"t":"mirror","x":425,"y":130,"a":45},{"t":"mirror","x":625,"y":350,"a":-45},{"t":"mirror","x":595,"y":165,"a":-45},{"t":"mirror","x":432,"y":84,"a":20,"rail":320,"range":150,"norot":1},{"t":"mirror","x":355,"y":540,"a":-60},{"t":"goal","x":120,"y":165,"band":[420,480],"r":20,"fixed":1,"need":0.6}],"sol":{"3":[660,490,-15],"4":[770,355,-80],"5":[725,230,20],"6":[565,325,10],"7":[393.7,116.1,20]}},
+/*sorter 30787*/{"name":"Stained sort","hint":"A dichroic mirror reflects its colors and passes the rest. Send each color to its own target.","pieces":[{"t":"emit","x":420,"y":100,"a":30,"band":[400,700],"fixed":1},{"t":"wall","x":830,"y":390,"w":30,"h":240,"a":75,"fixed":1},{"t":"wall","x":170,"y":360,"w":30,"h":190,"a":75,"fixed":1},{"t":"mirror","x":525,"y":360,"a":-45},{"t":"mirror","x":780,"y":190,"a":-30},{"t":"mirror","x":240,"y":525,"a":90},{"t":"dichro","x":120,"y":470,"a":-75,"band":[496.2,700]},{"t":"dichro","x":625,"y":375,"a":30,"band":[496.2,603.8]},{"t":"goal","x":395,"y":385,"band":[400,496.10769230769233],"r":16,"fixed":1,"ex":1,"need":0.6},{"t":"goal","x":260,"y":110,"band":[603.8923076923077,700],"r":16,"fixed":1,"ex":1,"need":0.6},{"t":"goal","x":285,"y":435,"band":[496.2,603.8],"r":16,"fixed":1,"ex":1,"need":0.6}],"sol":{"3":[560,180,0],"4":[690,105,35],"5":[660,290,-50],"6":[530,335,10],"7":[405,230,-10]}},
+/*polsplit 31441*/{"name":"Fair split","hint":"A polarizing splitter divides light by polarization. Balance the halves.","pieces":[{"t":"emit","x":895,"y":505,"a":190,"band":[595,605],"fixed":1,"pol":0},{"t":"wall","x":100,"y":75,"w":30,"h":105,"a":105,"fixed":1},{"t":"wall","x":130,"y":235,"w":30,"h":110,"a":165,"fixed":1},{"t":"pbs","x":185,"y":470,"a":-45,"ax":0},{"t":"hwp","x":690,"y":145,"a":0,"ax":0,"r":30},{"t":"pbs","x":765,"y":290,"a":90,"ax":67.5},{"t":"hwp","x":660,"y":270,"a":0,"ax":0,"r":30},{"t":"mirror","x":860,"y":115,"a":15},{"t":"mirror","x":265,"y":540,"a":30},{"t":"goal","x":185,"y":385,"band":[595,605],"r":15,"fixed":1,"show":1,"need":0.4},{"t":"goal","x":505,"y":175,"band":[595,605],"r":15,"fixed":1,"show":1,"need":0.05},{"t":"goal","x":855,"y":240,"band":[595,605],"r":15,"fixed":1,"show":1,"need":0.08}],"sol":{"3":[685,470,35,112.5],"4":[775,485,0,67.5],"5":[460,430,55,0],"6":[555,450,0,67.5],"7":[555,245,-85],"8":[705,65,0]},"pol":1},
+/*mich 41703*/{"name":"Ether wind","hint":"Slide the mirrors along their rails until the detector lights up.","pieces":[{"t":"emit","x":125,"y":275,"a":0,"band":[595,605],"fixed":1},{"t":"split","x":300,"y":275,"a":45,"fixed":1},{"t":"phase","x":300,"y":350,"a":0,"ax":270,"fixed":1},{"t":"mirror","x":390,"y":275,"a":90,"rail":0,"range":150,"norot":1},{"t":"mirror","x":300,"y":340,"a":0,"rail":90,"range":150,"norot":1},{"t":"goal","x":300,"y":75,"band":[595,605],"coh":1,"r":15,"need":0.8,"show":1,"fixed":1}],"sol":{"3":[450,275,90],"4":[300,400,0]},"coh":1},
+/*prism 40263*/{"name":"Cut glass","hint":"Glass bends each color differently. Find the angle that sends only the target color in.","pieces":[{"t":"emit","x":85,"y":295,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":85,"oy":295},{"t":"wall","x":880,"y":195,"w":30,"h":245,"a":45,"fixed":1},{"t":"wall","x":820,"y":55,"w":30,"h":130,"a":60,"fixed":1},{"t":"prism","x":720,"y":150,"a":75,"r":60},{"t":"mirror","x":310,"y":370,"a":0},{"t":"goal","x":505,"y":240,"band":[452.84615384615387,516.3846153846154],"r":10,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[325,335,55],"4":[525,430,-30]}},
+/*orb 40397*/{"name":"Moonstone","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":90,"y":185,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":90,"oy":185},{"t":"wall","x":720,"y":255,"w":30,"h":135,"a":60,"fixed":1},{"t":"wall","x":640,"y":495,"w":30,"h":185,"a":60,"fixed":1},{"t":"orb","x":760,"y":125,"a":0,"r":40,"norot":1},{"t":"mirror","x":930,"y":80,"a":90},{"t":"goal","x":505,"y":65,"band":[414.38461538461536,501],"r":12,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[275,205,0],"4":[555,290,-40]}},
+/*orb 42489*/{"name":"Crystal ball","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":80,"y":165,"a":0.3490658503988659,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":80,"oy":165},{"t":"wall","x":85,"y":525,"w":30,"h":130,"a":150,"fixed":1},{"t":"wall","x":785,"y":435,"w":30,"h":250,"a":75,"fixed":1},{"t":"orb","x":595,"y":125,"a":0,"r":60,"norot":1},{"t":"mirror","x":410,"y":240,"a":0},{"t":"goal","x":495,"y":500,"band":[422.0769230769231,454.84615384615387],"r":20,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[345,225,0],"4":[565,240,50]}},
+/*spread 40132*/{"name":"Dial a focus","hint":"Squeeze the lens to the right strength and slide it until the beam reaches every target.","pieces":[{"t":"emit","x":730,"y":240,"a":160,"band":[420,480],"fixed":1,"w":30,"nb":25},{"t":"wall","x":820,"y":325,"w":30,"h":110,"a":0,"fixed":1},{"t":"wall","x":105,"y":410,"w":30,"h":185,"a":60,"fixed":1},{"t":"zlens","x":535,"y":535,"a":-45,"ax":247.5},{"t":"goal","x":340,"y":425,"band":[420,480],"r":20,"need":0.1,"show":1,"fixed":1},{"t":"goal","x":325,"y":385,"band":[420,480],"r":20,"need":0.1,"show":1,"fixed":1},{"t":"goal","x":310,"y":345,"band":[420,480],"r":20,"need":0.15,"show":1,"fixed":1}],"sol":{"3":[610,285,70,22.5]}},
+/*spread 41965*/{"name":"Peacock","hint":"A concave lens spreads light apart. Place it so the beam reaches every target.","pieces":[{"t":"emit","x":190,"y":240,"a":340,"band":[620,700],"fixed":1,"w":30,"nb":25},{"t":"wall","x":610,"y":520,"w":30,"h":140,"a":30,"fixed":1},{"t":"wall","x":465,"y":445,"w":30,"h":235,"a":0,"fixed":1},{"t":"lens","x":765,"y":400,"a":-15,"f":-75},{"t":"goal","x":555,"y":55,"band":[620,700],"r":20,"need":0.1,"show":1,"fixed":1},{"t":"goal","x":570,"y":100,"band":[620,700],"r":20,"need":0.1,"show":1,"fixed":1},{"t":"goal","x":590,"y":145,"band":[620,700],"r":20,"need":0.1,"show":1,"fixed":1}],"sol":{"3":[275,205,70]}},
+/*mz 41572*/{"name":"Square dance","hint":"Delay one arm so the right port lights and the other stays dark.","pieces":[{"t":"emit","x":200,"y":75,"a":0,"band":[595,605],"fixed":1},{"t":"split","x":225,"y":75,"a":45,"fixed":1},{"t":"mirror","x":600,"y":75,"a":45,"fixed":1},{"t":"split","x":600,"y":400,"a":45,"fixed":1},{"t":"mirror","x":225,"y":400,"a":45,"fixed":1},{"t":"phase","x":350,"y":75,"a":0,"ax":270,"fixed":1},{"t":"phase","x":225,"y":225,"a":0,"ax":315,"fixed":1},{"t":"phase","x":725,"y":510,"a":0,"ax":225},{"t":"phase","x":920,"y":490,"a":0,"ax":315},{"t":"phase","x":450,"y":480,"a":0,"ax":90},{"t":"goal","x":800,"y":400,"band":[595,605],"coh":1,"r":15,"fixed":1,"show":1,"dark":1},{"t":"goal","x":600,"y":505,"band":[595,605],"coh":1,"r":15,"fixed":1,"show":1,"need":0.8}],"sol":{"7":[425,400,0,180],"8":[425,75,0,270],"9":[600,150,0,135]},"coh":1},
+/*orb 42229*/{"name":"Fishbowl","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":100,"y":235,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":100,"oy":235},{"t":"wall","x":310,"y":100,"w":30,"h":115,"a":75,"fixed":1},{"t":"wall","x":835,"y":385,"w":30,"h":230,"a":75,"fixed":1},{"t":"orb","x":410,"y":490,"a":0,"r":50,"norot":1},{"t":"mirror","x":690,"y":275,"a":30},{"t":"mirror","x":165,"y":385,"a":30},{"t":"goal","x":855,"y":275,"band":[460.53846153846155,485.61538461538464],"r":10,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[315,270,0],"4":[555,400,-20],"5":[605,205,-30]}},
+/*orb 42359*/{"name":"Gumball","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":105,"y":205,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":105,"oy":205},{"t":"wall","x":135,"y":425,"w":30,"h":215,"a":45,"fixed":1},{"t":"wall","x":375,"y":495,"w":30,"h":160,"a":105,"fixed":1},{"t":"orb","x":740,"y":305,"a":0,"r":60,"norot":1},{"t":"mirror","x":615,"y":165,"a":45},{"t":"mirror","x":290,"y":375,"a":45},{"t":"goal","x":535,"y":160,"band":[445.15384615384613,516.3846153846154],"r":17,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[365,240,0],"4":[645,345,5],"5":[795,300,-85]}},
+/*pinhole 41179*/{"name":"Squeeze play","hint":"Focus the beam through the gap, then straighten it out again.","pieces":[{"t":"emit","x":330,"y":460,"a":310,"band":[420,480],"fixed":1,"w":75,"nb":11},{"t":"wall","x":556,"y":363,"w":30,"h":185,"a":310,"fixed":1},{"t":"wall","x":384,"y":219,"w":30,"h":185,"a":310,"fixed":1},{"t":"wall","x":810,"y":60,"w":30,"h":220,"a":75,"fixed":1},{"t":"lens","x":720,"y":500,"a":-45,"f":130},{"t":"lens","x":135,"y":355,"a":-15,"f":145},{"t":"mirror","x":930,"y":195,"a":90},{"t":"mirror","x":855,"y":350,"a":-45},{"t":"goal","x":835,"y":165,"band":[420,480],"r":30,"fixed":1,"show":1,"need":0.3}],"sol":{"4":[385,390,40],"5":[565,180,40],"6":[620,110,15],"7":[655,315,20]}},
+/*polchain 41310*/{"name":"Little by little","hint":"The beam must pass the last polarizer. Turn the axes in small steps.","pieces":[{"t":"emit","x":790,"y":175,"a":120,"band":[595,605],"fixed":1,"pol":67.5},{"t":"pol","x":167.3630322078959,"y":413.15281376337884,"a":0,"ax":157.5,"fixed":1},{"t":"wall","x":555,"y":520,"w":30,"h":105,"a":15,"fixed":1},{"t":"wall","x":595,"y":105,"w":30,"h":135,"a":30,"fixed":1},{"t":"mirror","x":500,"y":260,"a":75},{"t":"mirror","x":750,"y":245,"a":45},{"t":"mirror","x":440,"y":95,"a":45},{"t":"pol","x":280,"y":215,"a":0,"ax":0,"r":30},{"t":"pol","x":415,"y":210,"a":0,"ax":45,"r":30},{"t":"goal","x":100,"y":360,"band":[595,605],"r":15,"fixed":1,"show":1,"need":0.25}],"sol":{"4":[685,355,-25],"5":[395,305,-25],"6":[280,505,-10],"7":[745,250,0,97.5],"8":[350,380,0,127.5]},"pol":1},
+/*combine 40917*/{"name":"Meeting point","hint":"Merge the beams so every color passes through the slot.","pieces":[{"t":"emit","x":895,"y":480,"a":230,"band":[520,570],"fixed":1},{"t":"emit","x":650,"y":545,"a":320,"band":[620,700],"fixed":1},{"t":"emit","x":925,"y":205,"a":140,"band":[420,480],"fixed":1},{"t":"wall","x":268,"y":234,"w":30,"h":150,"a":150,"fixed":1},{"t":"wall","x":378,"y":425,"w":30,"h":150,"a":150,"fixed":1},{"t":"wall","x":75,"y":415,"w":30,"h":210,"a":0,"fixed":1},{"t":"dichro","x":205,"y":280,"a":-30,"band":[620,700]},{"t":"dichro","x":745,"y":530,"a":45,"band":[420,480]},{"t":"mirror","x":160,"y":460,"a":90},{"t":"mirror","x":820,"y":200,"a":60},{"t":"mirror","x":735,"y":430,"a":-60},{"t":"goal","x":235,"y":380,"r":16,"fixed":1,"bands":[[520,570],[620,700],[420,480]],"need":0.6}],"sol":{"6":[825,395,-85],"7":[770,335,5],"8":[740,295,15],"9":[550,365,10],"10":[430,265,5]}},
+/*relay 40524*/{"name":"Pure tone","hint":"White light in, one color out. A filter passes only its band.","pieces":[{"t":"emit","x":295,"y":155,"a":60,"band":[400,700],"fixed":1},{"t":"wall","x":925,"y":70,"w":30,"h":100,"a":15,"fixed":1},{"t":"wall","x":220,"y":60,"w":30,"h":190,"a":90,"fixed":1},{"t":"wall","x":100,"y":195,"w":30,"h":150,"a":75,"fixed":1},{"t":"mirror","x":920,"y":205,"a":-45},{"t":"mirror","x":360,"y":330,"a":-60},{"t":"mirror","x":280,"y":525,"a":-45},{"t":"mirror","x":715,"y":380,"a":-75},{"t":"mirror","x":910,"y":325,"a":15},{"t":"filter","x":585,"y":510,"a":-60,"band":[420,480],"len":80},{"t":"goal","x":830,"y":330,"band":[420,480],"r":13,"fixed":1,"ex":1,"need":0.6}],"sol":{"4":[390,320,15],"5":[540,230,0],"6":[680,310,80],"7":[565,450,65],"8":[725,450,-25],"9":[330,220,-30]}},
+/*focus 41048*/{"name":"Hit the dot","hint":"The lens focuses parallel light at its focal length behind it. Put the focus on the target.","pieces":[{"t":"emit","x":190,"y":440,"a":0,"band":[420,480],"fixed":1,"w":50,"nb":9},{"t":"wall","x":795,"y":515,"w":30,"h":195,"a":120,"fixed":1},{"t":"wall","x":115,"y":120,"w":30,"h":150,"a":105,"fixed":1},{"t":"mirror","x":565,"y":445,"a":45},{"t":"split","x":510,"y":125,"a":15},{"t":"mirror","x":95,"y":275,"a":90},{"t":"lens","x":635,"y":135,"a":30,"f":100},{"t":"mirror","x":295,"y":115,"a":-15},{"t":"lens","x":655,"y":535,"a":30,"f":100},{"t":"goal","x":800,"y":285,"band":[420,480],"r":7,"fixed":1,"show":1,"need":0.2},{"t":"goal","x":170,"y":250,"band":[420,480],"r":7,"fixed":1,"show":1,"need":0.2}],"sol":{"3":[390,440,-25],"4":[510,295,-85],"5":[690,85,5],"6":[750,195,-30],"7":[405,115,15],"8":[260,200,60]}},
+/*zoom 41836*/{"name":"Variable focus","hint":"This lens squeezes to any focal length. Slide it and set its dial so the focus lands on the target.","pieces":[{"t":"emit","x":260,"y":375,"a":310,"band":[420,480],"fixed":1,"w":40,"nb":9},{"t":"wall","x":175,"y":230,"w":30,"h":125,"a":150,"fixed":1},{"t":"wall","x":830,"y":350,"w":30,"h":210,"a":60,"fixed":1},{"t":"split","x":825,"y":255,"a":90},{"t":"mirror","x":350,"y":420,"a":15},{"t":"zlens","x":240,"y":105,"a":-30,"ax":112.5},{"t":"mirror","x":660,"y":300,"a":90},{"t":"mirror","x":940,"y":485,"a":-60},{"t":"zlens","x":95,"y":250,"a":45,"ax":225},{"t":"goal","x":715,"y":60,"band":[420,480],"r":9,"fixed":1,"show":1,"need":0.2},{"t":"goal","x":630,"y":525,"band":[420,480],"r":9,"fixed":1,"show":1,"need":0.3}],"sol":{"3":[380,230,15],"4":[490,100,-30],"5":[615,80,80,292.5],"6":[410,405,30],"7":[665,310,40],"8":[645,425,10,292.5]}},
+/*fan 40655*/{"name":"Sunburst","hint":"A splitter sends half the light each way. Every target needs some.","pieces":[{"t":"emit","x":835,"y":230,"a":230,"band":[620,700],"fixed":1},{"t":"wall","x":725,"y":550,"w":30,"h":100,"a":105,"fixed":1},{"t":"wall","x":80,"y":200,"w":30,"h":215,"a":30,"fixed":1},{"t":"mirror","x":130,"y":495,"a":75},{"t":"split","x":295,"y":220,"a":-15},{"t":"split","x":565,"y":345,"a":60},{"t":"mirror","x":925,"y":145,"a":30},{"t":"mirror","x":665,"y":430,"a":-30},{"t":"split","x":790,"y":400,"a":90},{"t":"goal","x":210,"y":275,"band":[620,700],"r":13,"fixed":1,"need":0.15},{"t":"goal","x":375,"y":515,"band":[620,700],"r":13,"fixed":1,"need":0.15},{"t":"goal","x":665,"y":305,"band":[620,700],"r":13,"fixed":1,"need":0.3}],"sol":{"3":[720,90,15],"4":[500,170,-80],"5":[350,225,-45],"6":[295,370,65],"7":[470,435,80]}},
+/*polsplit 41441*/{"name":"Fifty-fifty","hint":"A polarizing splitter divides light by polarization. Balance the halves.","pieces":[{"t":"emit","x":875,"y":170,"a":190,"band":[595,605],"fixed":1,"pol":135},{"t":"wall","x":485,"y":255,"w":30,"h":145,"a":75,"fixed":1},{"t":"wall","x":875,"y":270,"w":30,"h":220,"a":105,"fixed":1},{"t":"pbs","x":250,"y":270,"a":60,"ax":135},{"t":"hwp","x":110,"y":190,"a":0,"ax":135,"r":30},{"t":"pbs","x":360,"y":270,"a":-45,"ax":112.5},{"t":"hwp","x":515,"y":410,"a":0,"ax":45,"r":30},{"t":"mirror","x":650,"y":315,"a":-75},{"t":"mirror","x":140,"y":470,"a":-45},{"t":"goal","x":305,"y":70,"band":[595,605],"r":18,"fixed":1,"show":1,"need":0.08},{"t":"goal","x":815,"y":500,"band":[595,605],"r":18,"fixed":1,"show":1,"need":0.05},{"t":"goal","x":215,"y":180,"band":[595,605],"r":18,"fixed":1,"show":1,"need":0.4}],"sol":{"3":[595,120,-55,112.5],"4":[690,135,0,157.5],"5":[705,310,-80,45],"6":[660,230,0,67.5],"7":[475,505,-5],"8":[295,395,50]},"pol":1},
+/*zoom 40000*/{"name":"Iris","hint":"This lens squeezes to any focal length. Slide it and set its dial so the focus lands on the target.","pieces":[{"t":"emit","x":170,"y":180,"a":350,"band":[420,480],"fixed":1,"w":55,"nb":9},{"t":"wall","x":840,"y":540,"w":30,"h":185,"a":105,"fixed":1},{"t":"wall","x":125,"y":70,"w":30,"h":155,"a":75,"fixed":1},{"t":"mirror","x":360,"y":350,"a":90},{"t":"mirror","x":745,"y":160,"a":90},{"t":"mirror","x":935,"y":310,"a":75},{"t":"mirror","x":470,"y":85,"a":-15},{"t":"split","x":625,"y":325,"a":-15},{"t":"zlens","x":420,"y":495,"a":0,"ax":157.5},{"t":"zlens","x":640,"y":100,"a":-45,"ax":22.5},{"t":"goal","x":720,"y":370,"band":[420,480],"r":7,"fixed":1,"show":1,"need":0.2},{"t":"goal","x":495,"y":235,"band":[420,480],"r":7,"fixed":1,"show":1,"need":0.2}],"sol":{"3":[370,145,40],"4":[370,300,-60],"5":[215,385,-70],"6":[270,535,25],"7":[495,450,-55],"8":[630,405,70,292.5],"9":[495,335,0,292.5]}},
+/*focus 42096*/{"name":"Zoom in","hint":"The lens focuses parallel light at its focal length behind it. Put the focus on the target.","pieces":[{"t":"emit","x":820,"y":275,"a":70,"band":[620,700],"fixed":1,"w":65,"nb":9},{"t":"wall","x":185,"y":370,"w":30,"h":205,"a":165,"fixed":1},{"t":"wall","x":930,"y":100,"w":30,"h":130,"a":165,"fixed":1},{"t":"mirror","x":655,"y":320,"a":0},{"t":"mirror","x":115,"y":425,"a":75},{"t":"split","x":630,"y":225,"a":15},{"t":"mirror","x":285,"y":395,"a":-45},{"t":"lens","x":650,"y":435,"a":-15,"f":300},{"t":"mirror","x":805,"y":130,"a":-75},{"t":"lens","x":640,"y":530,"a":-60,"f":300},{"t":"goal","x":445,"y":105,"band":[620,700],"r":9,"fixed":1,"show":1,"need":0.15},{"t":"goal","x":715,"y":365,"band":[620,700],"r":9,"fixed":1,"show":1,"need":0.15}],"sol":{"3":[875,420,-60],"4":[620,470,15],"5":[410,295,-85],"6":[265,170,-80],"7":[345,235,-50],"8":[640,160,20],"9":[570,200,60]}},
+/*sorter 40786*/{"name":"Chromatic sort","hint":"A dichroic mirror reflects its colors and passes the rest. Send each color to its own target.","pieces":[{"t":"emit","x":190,"y":255,"a":350,"band":[400,700],"fixed":1},{"t":"wall","x":120,"y":475,"w":30,"h":115,"a":120,"fixed":1},{"t":"wall","x":155,"y":90,"w":30,"h":165,"a":135,"fixed":1},{"t":"mirror","x":355,"y":460,"a":0},{"t":"mirror","x":85,"y":375,"a":-45},{"t":"dichro","x":700,"y":270,"a":30,"band":[550.0461538461539,700]},{"t":"dichro","x":565,"y":460,"a":-60,"band":[400,473.03076923076924]},{"t":"mirror","x":325,"y":75,"a":0},{"t":"dichro","x":205,"y":360,"a":-75,"band":[626.9692307692308,700]},{"t":"goal","x":820,"y":335,"band":[473.1230769230769,549.9538461538461],"r":13,"fixed":1,"ex":1,"need":0.6},{"t":"goal","x":750,"y":495,"band":[400,473.03076923076924],"r":13,"fixed":1,"ex":1,"need":0.6},{"t":"goal","x":620,"y":85,"band":[550.0461538461539,626.876923076923],"r":13,"fixed":1,"ex":1,"need":0.6},{"t":"goal","x":730,"y":170,"band":[626.9692307692308,700],"r":13,"fixed":1,"ex":1,"need":0.6}],"sol":{"3":[390,220,50],"4":[315,425,50],"5":[435,405,-35],"6":[655,365,45],"7":[625,540,40],"8":[555,200,-35]}},
+/*mich 51703*/{"name":"Fringe counter","hint":"Slide the mirrors along their rails until the detector lights up.","pieces":[{"t":"emit","x":100,"y":275,"a":0,"band":[595,605],"fixed":1},{"t":"split","x":325,"y":275,"a":45,"fixed":1},{"t":"phase","x":325,"y":362.5,"a":0,"ax":270,"fixed":1},{"t":"mirror","x":400,"y":275,"a":90,"rail":0,"range":150,"norot":1},{"t":"mirror","x":325,"y":360,"a":0,"rail":90,"range":150,"norot":1},{"t":"goal","x":325,"y":75,"band":[595,605],"coh":1,"r":15,"need":0.8,"show":1,"fixed":1}],"sol":{"3":[475,275,90],"4":[325,450,0]},"coh":1},
+/*spread 50132*/{"name":"Wide load","hint":"A concave lens spreads light apart. Place it so the beam reaches every target.","pieces":[{"t":"emit","x":240,"y":450,"a":330,"band":[420,480],"fixed":1,"w":30,"nb":25},{"t":"wall","x":365,"y":180,"w":30,"h":210,"a":135,"fixed":1},{"t":"wall","x":545,"y":525,"w":30,"h":175,"a":90,"fixed":1},{"t":"lens","x":810,"y":520,"a":0,"f":-75},{"t":"goal","x":620,"y":170,"band":[420,480],"r":20,"need":0.1,"show":1,"fixed":1},{"t":"goal","x":650,"y":215,"band":[420,480],"r":20,"need":0.1,"show":1,"fixed":1},{"t":"goal","x":675,"y":260,"band":[420,480],"r":20,"need":0.1,"show":1,"fixed":1}],"sol":{"3":[345,390,60]}},
+/*spread 51968*/{"name":"Spotlight reverse","hint":"A concave lens spreads light apart. Place it so the beam reaches every target.","pieces":[{"t":"emit","x":250,"y":295,"a":350,"band":[420,480],"fixed":1,"w":30,"nb":25},{"t":"wall","x":695,"y":515,"w":30,"h":150,"a":0,"fixed":1},{"t":"wall","x":135,"y":205,"w":30,"h":130,"a":105,"fixed":1},{"t":"lens","x":235,"y":525,"a":-15,"f":-110},{"t":"goal","x":735,"y":175,"band":[420,480],"r":20,"need":0.15,"show":1,"fixed":1},{"t":"goal","x":740,"y":210,"band":[420,480],"r":20,"need":0.15,"show":1,"fixed":1},{"t":"goal","x":745,"y":245,"band":[420,480],"r":20,"need":0.15,"show":1,"fixed":1}],"sol":{"3":[390,270,80]}},
+/*prism 50266*/{"name":"Pick a colour","hint":"Glass bends each color differently. Find the angle that sends only the target color in.","pieces":[{"t":"emit","x":95,"y":405,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":95,"oy":405},{"t":"wall","x":195,"y":160,"w":30,"h":135,"a":60,"fixed":1},{"t":"wall","x":830,"y":480,"w":30,"h":240,"a":75,"fixed":1},{"t":"prism","x":450,"y":235,"a":45,"r":60},{"t":"mirror","x":375,"y":355,"a":-30},{"t":"mirror","x":745,"y":280,"a":90},{"t":"goal","x":795,"y":370,"band":[568.2307692307693,685.6153846153846],"r":17,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[335,405,85],"4":[560,270,25],"5":[580,420,35]}},
+/*orb 50394*/{"name":"Full circle","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":110,"y":295,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":110,"oy":295},{"t":"wall","x":875,"y":200,"w":30,"h":120,"a":150,"fixed":1},{"t":"wall","x":840,"y":425,"w":30,"h":105,"a":30,"fixed":1},{"t":"orb","x":60,"y":360,"a":0,"r":60,"norot":1},{"t":"mirror","x":500,"y":110,"a":-60},{"t":"mirror","x":650,"y":540,"a":15},{"t":"goal","x":425,"y":255,"band":[529.7692307692307,554.8461538461538],"r":10,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[385,345,0],"4":[590,465,-10],"5":[690,270,60]}},
+/*mz 51572*/{"name":"Racetrack","hint":"Delay one arm so the right port lights and the other stays dark.","pieces":[{"t":"emit","x":200,"y":75,"a":0,"band":[595,605],"fixed":1},{"t":"split","x":275,"y":75,"a":45,"fixed":1},{"t":"mirror","x":625,"y":75,"a":45,"fixed":1},{"t":"split","x":625,"y":350,"a":45,"fixed":1},{"t":"mirror","x":275,"y":350,"a":45,"fixed":1},{"t":"phase","x":275,"y":250,"a":0,"ax":270,"fixed":1},{"t":"phase","x":370,"y":330,"a":0,"ax":0},{"t":"phase","x":700,"y":115,"a":0,"ax":315},{"t":"phase","x":465,"y":275,"a":0,"ax":45},{"t":"goal","x":825,"y":350,"band":[595,605],"coh":1,"r":15,"fixed":1,"show":1,"dark":1},{"t":"goal","x":625,"y":455,"band":[595,605],"coh":1,"r":15,"fixed":1,"show":1,"need":0.8}],"sol":{"6":[625,275,0,90],"7":[375,75,0,90],"8":[450,75,0,270]},"coh":1},
+/*orb 52227*/{"name":"Bubble","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":75,"y":190,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":75,"oy":190},{"t":"wall","x":660,"y":70,"w":30,"h":190,"a":120,"fixed":1},{"t":"wall","x":905,"y":550,"w":30,"h":120,"a":105,"fixed":1},{"t":"orb","x":665,"y":190,"a":0,"r":60,"norot":1},{"t":"mirror","x":355,"y":220,"a":75},{"t":"mirror","x":120,"y":85,"a":0},{"t":"goal","x":575,"y":490,"band":[437.46153846153845,539.4615384615385],"r":20,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[370,225,0],"4":[555,280,5],"5":[710,230,50]}},
+/*orb 52360*/{"name":"Marble","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":115,"y":315,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":115,"oy":315},{"t":"wall","x":345,"y":175,"w":30,"h":115,"a":75,"fixed":1},{"t":"wall","x":240,"y":65,"w":30,"h":150,"a":90,"fixed":1},{"t":"orb","x":190,"y":260,"a":0,"r":55,"norot":1},{"t":"mirror","x":885,"y":415,"a":-15},{"t":"mirror","x":630,"y":405,"a":75},{"t":"goal","x":795,"y":290,"band":[452.84615384615387,485.61538461538464],"r":17,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[405,360,0],"4":[590,490,20],"5":[835,455,-55]}},
+/*orb 52491*/{"name":"Orb weaver","hint":"A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.","pieces":[{"t":"emit","x":115,"y":175,"a":0,"band":[400,700],"fixed":1,"pol":0,"nb":1,"w":0,"ox":115,"oy":175},{"t":"wall","x":360,"y":415,"w":30,"h":160,"a":30,"fixed":1},{"t":"wall","x":475,"y":65,"w":30,"h":105,"a":150,"fixed":1},{"t":"orb","x":630,"y":150,"a":0,"r":60,"norot":1},{"t":"mirror","x":880,"y":370,"a":90},{"t":"mirror","x":90,"y":425,"a":-75},{"t":"goal","x":540,"y":185,"band":[529.7692307692307,570.2307692307693],"r":12,"show":0,"fixed":1,"need":0.6,"ex":1}],"sol":{"3":[440,225,0],"4":[630,330,-15],"5":[700,100,40]}},
+/*pinhole 51179*/{"name":"Needle’s eye","hint":"Focus the beam through the gap, then straighten it out again.","pieces":[{"t":"emit","x":730,"y":415,"a":210,"band":[420,480],"fixed":1,"w":80,"nb":11},{"t":"wall","x":594,"y":209,"w":30,"h":180,"a":210,"fixed":1},{"t":"wall","x":484,"y":399,"w":30,"h":180,"a":210,"fixed":1},{"t":"wall","x":530,"y":145,"w":30,"h":135,"a":105,"fixed":1},{"t":"lens","x":145,"y":435,"a":90,"f":145},{"t":"lens","x":85,"y":185,"a":0,"f":145},{"t":"mirror","x":710,"y":70,"a":-45},{"t":"mirror","x":930,"y":95,"a":75},{"t":"goal","x":225,"y":65,"band":[420,480],"r":30,"fixed":1,"show":1,"need":0.4}],"sol":{"4":[665,375,-60],"5":[415,230,-60],"6":[320,175,5],"7":[165,230,45]}},
+/*combine 50919*/{"name":"Rendezvous","hint":"Merge the beams so every color passes through the slot.","pieces":[{"t":"emit","x":150,"y":110,"a":30,"band":[520,570],"fixed":1},{"t":"emit","x":160,"y":340,"a":300,"band":[620,700],"fixed":1},{"t":"emit","x":230,"y":415,"a":300,"band":[420,480],"fixed":1},{"t":"wall","x":702,"y":445,"w":30,"h":170,"a":280,"fixed":1},{"t":"wall","x":461,"y":402,"w":30,"h":170,"a":280,"fixed":1},{"t":"wall","x":915,"y":280,"w":30,"h":115,"a":45,"fixed":1},{"t":"dichro","x":280,"y":485,"a":-60,"band":[620,700]},{"t":"dichro","x":655,"y":235,"a":90,"band":[420,480]},{"t":"mirror","x":715,"y":105,"a":30},{"t":"mirror","x":210,"y":215,"a":-45},{"t":"mirror","x":435,"y":240,"a":-75},{"t":"goal","x":600,"y":325,"r":16,"fixed":1,"bands":[[520,570],[620,700],[420,480]],"need":0.6}],"sol":{"6":[260,170,-15],"7":[345,220,-15],"8":[390,250,70],"9":[315,455,65],"10":[560,540,-30]}},
+/*polchain 51311*/{"name":"Step stool","hint":"The beam must pass the last polarizer. Turn the axes in small steps.","pieces":[{"t":"emit","x":640,"y":180,"a":20,"band":[595,605],"fixed":1,"pol":45},{"t":"pol","x":163.13731003152833,"y":306.2733262304119,"a":0,"ax":135,"fixed":1},{"t":"wall","x":215,"y":160,"w":30,"h":155,"a":135,"fixed":1},{"t":"wall","x":915,"y":130,"w":30,"h":135,"a":75,"fixed":1},{"t":"mirror","x":370,"y":410,"a":-30},{"t":"mirror","x":210,"y":505,"a":-45},{"t":"mirror","x":695,"y":75,"a":-75},{"t":"mirror","x":800,"y":290,"a":75},{"t":"pol","x":925,"y":420,"a":0,"ax":157.5,"r":30},{"t":"pol","x":85,"y":365,"a":0,"ax":22.5,"r":30},{"t":"goal","x":110,"y":240,"band":[595,605],"r":18,"fixed":1,"show":1,"need":0.25}],"sol":{"4":[840,255,85],"5":[615,385,0],"6":[360,235,-20],"7":[280,450,-10],"8":[430,280,0,75],"9":[325,335,0,105]},"pol":1},
+/*relay 50525*/{"name":"Hairpin","hint":"Bounce the beam around the walls and into the target.","pieces":[{"t":"emit","x":330,"y":480,"a":280,"band":[620,700],"fixed":1},{"t":"wall","x":195,"y":335,"w":30,"h":225,"a":0,"fixed":1},{"t":"wall","x":165,"y":495,"w":30,"h":120,"a":60,"fixed":1},{"t":"wall","x":415,"y":155,"w":30,"h":220,"a":75,"fixed":1},{"t":"mirror","x":690,"y":455,"a":15},{"t":"mirror","x":75,"y":450,"a":30},{"t":"mirror","x":150,"y":150,"a":60},{"t":"mirror","x":350,"y":300,"a":30},{"t":"mirror","x":935,"y":135,"a":-30},{"t":"mirror","x":900,"y":260,"a":-45},{"t":"goal","x":845,"y":445,"band":[620,700],"r":16,"fixed":1,"need":0.6}],"sol":{"4":[360,305,-20],"5":[455,385,-5],"6":[550,265,-5],"7":[665,360,80],"8":[580,510,65],"9":[695,530,-10]}},
+/*polsplit 51441*/{"name":"Polar fork","hint":"A polarizing splitter divides light by polarization. Balance the halves.","pieces":[{"t":"emit","x":915,"y":520,"a":250,"band":[595,605],"fixed":1,"pol":90},{"t":"wall","x":120,"y":455,"w":30,"h":170,"a":165,"fixed":1},{"t":"wall","x":660,"y":435,"w":30,"h":110,"a":75,"fixed":1},{"t":"mirror","x":890,"y":140,"a":-45},{"t":"pbs","x":415,"y":245,"a":45,"ax":112.5},{"t":"hwp","x":335,"y":490,"a":0,"ax":67.5,"r":30},{"t":"mirror","x":760,"y":115,"a":-75},{"t":"pbs","x":540,"y":145,"a":45,"ax":0},{"t":"hwp","x":300,"y":300,"a":0,"ax":45,"r":30},{"t":"goal","x":235,"y":490,"band":[595,605],"r":15,"fixed":1,"show":1,"need":0.25},{"t":"goal","x":70,"y":160,"band":[595,605],"r":15,"fixed":1,"show":1,"need":0.03},{"t":"goal","x":510,"y":360,"band":[595,605],"r":15,"fixed":1,"show":1,"need":0.3}],"sol":{"3":[815,240,45],"4":[545,140,-30,90],"5":[635,175,0,112.5],"6":[310,55,-30],"7":[275,280,-25,22.5],"8":[290,185,0,67.5]},"pol":1},
+/*zoom 50003*/{"name":"Zoom lens","hint":"This lens squeezes to any focal length. Slide it and set its dial so the focus lands on the target.","pieces":[{"t":"emit","x":630,"y":165,"a":20,"band":[420,480],"fixed":1,"w":60,"nb":9},{"t":"wall","x":145,"y":505,"w":30,"h":115,"a":105,"fixed":1},{"t":"wall","x":165,"y":160,"w":30,"h":110,"a":75,"fixed":1},{"t":"mirror","x":300,"y":425,"a":45},{"t":"mirror","x":315,"y":75,"a":60},{"t":"split","x":915,"y":335,"a":60},{"t":"mirror","x":915,"y":130,"a":-60},{"t":"mirror","x":340,"y":270,"a":75},{"t":"zlens","x":875,"y":235,"a":45,"ax":112.5},{"t":"zlens","x":875,"y":485,"a":-75,"ax":270},{"t":"goal","x":110,"y":330,"band":[420,480],"r":7,"fixed":1,"show":1,"need":0.25},{"t":"goal","x":450,"y":440,"band":[420,480],"r":7,"fixed":1,"show":1,"need":0.25}],"sol":{"3":[870,250,75],"4":[750,390,-10],"5":[520,260,-20],"6":[300,130,-30],"7":[300,400,-35],"8":[205,365,-70,292.5],"9":[485,345,20,292.5]}},
+/*focus 51048*/{"name":"Focal point","hint":"The lens focuses parallel light at its focal length behind it. Put the focus on the target.","pieces":[{"t":"emit","x":605,"y":330,"a":280,"band":[420,480],"fixed":1,"w":50,"nb":9},{"t":"wall","x":765,"y":395,"w":30,"h":205,"a":15,"fixed":1},{"t":"wall","x":850,"y":80,"w":30,"h":180,"a":90,"fixed":1},{"t":"mirror","x":820,"y":465,"a":-60},{"t":"mirror","x":550,"y":485,"a":0},{"t":"mirror","x":235,"y":190,"a":60},{"t":"split","x":630,"y":230,"a":0},{"t":"lens","x":385,"y":440,"a":90,"f":100},{"t":"mirror","x":295,"y":310,"a":90},{"t":"lens","x":180,"y":305,"a":-45,"f":100},{"t":"goal","x":170,"y":170,"band":[420,480],"r":7,"fixed":1,"show":1,"need":0.2},{"t":"goal","x":605,"y":65,"band":[420,480],"r":7,"fixed":1,"show":1,"need":0.2}],"sol":{"3":[630,165,35],"4":[480,255,-55],"5":[455,405,-20],"6":[320,295,70],"7":[245,230,-50],"8":[360,65,-40],"9":[505,65,90]}},
+/*zoom 51836*/{"name":"Autofocus","hint":"This lens squeezes to any focal length. Slide it and set its dial so the focus lands on the target.","pieces":[{"t":"emit","x":795,"y":295,"a":70,"band":[620,700],"fixed":1,"w":70,"nb":9},{"t":"wall","x":220,"y":350,"w":30,"h":195,"a":30,"fixed":1},{"t":"wall","x":120,"y":530,"w":30,"h":100,"a":60,"fixed":1},{"t":"mirror","x":385,"y":470,"a":30},{"t":"split","x":440,"y":295,"a":-45},{"t":"mirror","x":705,"y":530,"a":-30},{"t":"mirror","x":895,"y":275,"a":-15},{"t":"mirror","x":205,"y":70,"a":-60},{"t":"zlens","x":525,"y":85,"a":30,"ax":0},{"t":"zlens","x":480,"y":185,"a":0,"ax":247.5},{"t":"goal","x":665,"y":250,"band":[620,700],"r":7,"fixed":1,"show":1,"need":0.2},{"t":"goal","x":460,"y":365,"band":[620,700],"r":7,"fixed":1,"show":1,"need":0.1}],"sol":{"3":[880,530,-55],"4":[660,530,20],"5":[470,530,30],"6":[355,325,-85],"7":[470,180,-15],"8":[570,215,-70,292.5],"9":[535,425,-50,292.5]}},
+/*focus 52096*/{"name":"Spotlight","hint":"The lens focuses parallel light at its focal length behind it. Put the focus on the target.","pieces":[{"t":"emit","x":795,"y":505,"a":250,"band":[420,480],"fixed":1,"w":55,"nb":9},{"t":"wall","x":905,"y":275,"w":30,"h":105,"a":45,"fixed":1},{"t":"wall","x":870,"y":145,"w":30,"h":110,"a":105,"fixed":1},{"t":"split","x":415,"y":315,"a":60},{"t":"lens","x":230,"y":450,"a":-75,"f":120},{"t":"mirror","x":380,"y":185,"a":60},{"t":"mirror","x":565,"y":230,"a":15},{"t":"mirror","x":460,"y":485,"a":-75},{"t":"mirror","x":715,"y":365,"a":-75},{"t":"lens","x":665,"y":275,"a":0,"f":120},{"t":"goal","x":645,"y":90,"band":[420,480],"r":7,"fixed":1,"show":1,"need":0.3},{"t":"goal","x":125,"y":430,"band":[420,480],"r":7,"fixed":1,"show":1,"need":0.15}],"sol":{"3":[735,335,15],"4":[685,200,-20],"5":[545,495,5],"6":[415,345,80],"7":[500,125,45],"8":[245,215,-40],"9":[185,325,30]}},
+/*fan 50655*/{"name":"Many hands","hint":"A splitter sends half the light each way. Every target needs some.","pieces":[{"t":"emit","x":170,"y":225,"a":100,"band":[520,570],"fixed":1},{"t":"wall","x":110,"y":75,"w":30,"h":110,"a":120,"fixed":1},{"t":"wall","x":885,"y":50,"w":30,"h":210,"a":105,"fixed":1},{"t":"mirror","x":695,"y":280,"a":-15},{"t":"mirror","x":660,"y":160,"a":75},{"t":"split","x":65,"y":510,"a":-75},{"t":"split","x":310,"y":330,"a":15},{"t":"mirror","x":910,"y":165,"a":-60},{"t":"split","x":525,"y":515,"a":45},{"t":"mirror","x":865,"y":490,"a":30},{"t":"goal","x":945,"y":325,"band":[520,570],"r":16,"fixed":1,"need":0.15},{"t":"goal","x":795,"y":165,"band":[520,570],"r":16,"fixed":1,"need":0.05},{"t":"goal","x":840,"y":275,"band":[520,570],"r":16,"fixed":1,"need":0.05},{"t":"goal","x":530,"y":155,"band":[520,570],"r":16,"fixed":1,"need":0.3}],"sol":{"3":[150,340,40],"4":[295,290,0],"5":[480,355,-45],"6":[645,420,-20],"7":[810,480,-15],"8":[715,295,-35],"9":[425,210,-70]}},
+/*sorter 50787*/{"name":"Sort of bright","hint":"A dichroic mirror reflects its colors and passes the rest. Send each color to its own target.","pieces":[{"t":"emit","x":585,"y":120,"a":160,"band":[400,700],"fixed":1},{"t":"wall","x":160,"y":325,"w":30,"h":100,"a":75,"fixed":1},{"t":"wall","x":145,"y":175,"w":30,"h":220,"a":45,"fixed":1},{"t":"dichro","x":580,"y":235,"a":45,"band":[473.1230769230769,700]},{"t":"dichro","x":610,"y":380,"a":0,"band":[626.9692307692308,700]},{"t":"dichro","x":825,"y":235,"a":-75,"band":[550.0461538461539,626.876923076923]},{"t":"mirror","x":295,"y":430,"a":45},{"t":"mirror","x":730,"y":195,"a":90},{"t":"mirror","x":460,"y":470,"a":45},{"t":"mirror","x":420,"y":250,"a":-30},{"t":"goal","x":270,"y":235,"band":[400,473.03076923076924],"r":13,"fixed":1,"ex":1,"need":0.6},{"t":"goal","x":915,"y":365,"band":[473.1230769230769,549.9538461538461],"r":13,"fixed":1,"ex":1,"need":0.6},{"t":"goal","x":730,"y":530,"band":[550.0461538461539,626.876923076923],"r":13,"fixed":1,"ex":1,"need":0.6},{"t":"goal","x":210,"y":415,"band":[626.9692307692308,700],"r":13,"fixed":1,"ex":1,"need":0.6}],"sol":{"3":[455,170,-80],"4":[555,255,-75],"5":[705,380,60],"6":[800,460,0],"7":[355,290,-45],"8":[310,535,-15]}}
+];
+
+// Level generator. Every level is built from a known solution, scrambled, then checked
+// with the real engine, so every generated level is solvable. Same seed, same level.
+// makeGen(engine) returns {make, TIERS}. Runs in Node and in the browser.
+function makeGen(E){
+const normalize=E.normalize,trace=E.trace,WL=E.WL;
+const R=Math.PI/180;
+const RED=[620,700],GRN=[520,570],BLU=[420,480],MONO=[595,605],WHITE=[400,700];
+const clone=o=>JSON.parse(JSON.stringify(o));
+function mulberry(seed){let a=seed>>>0;return()=>{a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296}}
+const ri=(rnd,a,b)=>a+Math.floor(rnd()*(b-a+1));
+const rr=(rnd,a,b)=>a+rnd()*(b-a);
+const pick=(rnd,arr)=>arr[Math.floor(rnd()*arr.length)];
+function shuffle(rnd,arr){const a=arr.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+const r5=v=>Math.round(v/5)*5;
+const n360=a=>((a%360)+360)%360;
+const m180=a=>{a=((a%180)+180)%180;return a>90?a-180:a};
+const W=1000,H=600;
+const TURNS=[];for(let t=40;t<=130;t+=10){TURNS.push(t,-t)}
+const NICE=[0.03,0.05,0.08,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.6,0.7,0.8,0.9];
+const DIALV={zlens:[0,22.5,45,67.5,90,112.5,135,157.5,180,202.5,225,247.5,270,292.5,315,337.5],pol:[0,22.5,45,67.5,90,112.5,135,157.5],hwp:[0,22.5,45,67.5,90,112.5,135,157.5],pbs:[0,22.5,45,67.5,90,112.5,135,157.5],phase:[0,45,90,135,180,225,270,315]};
+const DISCT={pol:1,hwp:1,phase:1};
+
+// ---------- geometry
+const dv=a=>[Math.cos(a*R),Math.sin(a*R)];
+function turnMirror(din,dout){
+  const a=dv(din),b=dv(dout);
+  return r5(m180(Math.atan2(b[1]-a[1],b[0]-a[0])/R+90));
+}
+function pSeg(px,py,x1,y1,x2,y2){const dx=x2-x1,dy=y2-y1,l2=dx*dx+dy*dy;let t=l2?((px-x1)*dx+(py-y1)*dy)/l2:0;t=Math.max(0,Math.min(1,t));return Math.hypot(px-x1-t*dx,py-y1-t*dy)}
+function segInter(ax,ay,bx,by,cx,cy,dx,dy){const d=(bx-ax)*(dy-cy)-(by-ay)*(dx-cx);if(Math.abs(d)<1e-9)return false;const t=((cx-ax)*(dy-cy)-(cy-ay)*(dx-cx))/d,u=((cx-ax)*(by-ay)-(cy-ay)*(bx-ax))/d;return t>=0&&t<=1&&u>=0&&u<=1}
+function segDist(a,b,c,d,e,f,g,h){
+  if(segInter(a,b,c,d,e,f,g,h))return 0;
+  return Math.min(pSeg(a,b,e,f,g,h),pSeg(c,d,e,f,g,h),pSeg(e,f,a,b,c,d),pSeg(g,h,a,b,c,d));
+}
+const inB=(x,y,m)=>x>=m&&x<=W-m&&y>=m&&y<=H-m;
+function nodeSeg(n,len){
+  const a=(n.k==='branch'?turnMirror(n.din,n.dside):turnMirror(n.din,n.dout))*R,h=(len||100)/2;
+  return [n.x-Math.cos(a)*h,n.y-Math.sin(a)*h,n.x+Math.cos(a)*h,n.y+Math.sin(a)*h];
+}
+
+// ---------- tree of beam paths
+// node kinds: turn (mirror), branch (splitter-like, a = straight child, b = side child), goal (leaf)
+function growTree(rnd,o){
+  const margin=o.margin||55,gap=o.legGap||45;
+  for(let att=0;att<(o.tries||600);att++){
+    const nodes=[],legs=[];let fail=false;
+    const d0=o.d0!==undefined?o.d0:10*ri(rnd,0,35);
+    const sx=o.sx||rr(rnd,70,930),sy=o.sy||rr(rnd,70,530);
+    const ext=(x,y,d,s,m,par,first)=>{
+      if(fail)return null;
+      const L=first&&o.firstL?o.firstL:rr(rnd,o.minL||120,o.maxL||300);
+      const nx=x+Math.cos(d*R)*L,ny=y+Math.sin(d*R)*L;
+      if(!inB(nx,ny,margin)){fail=true;return null}
+      const node={x:nx,y:ny,din:d,par,k:'goal'};
+      legs.push({x1:x,y1:y,x2:nx,y2:ny,d,len:L,to:node,from:par});
+      nodes.push(node);
+      if(s>0&&(m===0||rnd()<0.5)){
+        node.k='branch';node.dside=n360(d+pick(rnd,TURNS));
+        const sa=ri(rnd,0,s-1),sb=s-1-sa,ma=ri(rnd,0,m),mb=m-ma;
+        node.a=ext(nx,ny,d,sa,ma,node);node.b=ext(nx,ny,node.dside,sb,mb,node);
+      }else if(m>0){
+        node.k='turn';node.dout=n360(d+pick(rnd,TURNS));
+        node.next=ext(nx,ny,node.dout,s,m-1,node);
+      }
+      return node;
+    };
+    const first=ext(sx,sy,d0,o.splits||0,o.turns||0,null,true);
+    if(fail)continue;
+    if(layoutOk(sx,sy,nodes,legs,gap,o.nodeGap))return {sx,sy,d0,first,nodes,legs};
+  }
+  return null;
+}
+function layoutOk(sx,sy,nodes,legs,gap,nodeGap){
+  const ng=nodeGap||115;
+  for(let i=0;i<nodes.length;i++){
+    const a=nodes[i];
+    if(Math.hypot(a.x-sx,a.y-sy)<110)return false;
+    for(let j=i+1;j<nodes.length;j++){
+      const b=nodes[j];
+      if(Math.hypot(a.x-b.x,a.y-b.y)<(a.k==='goal'||b.k==='goal'?85:ng))return false;
+    }
+  }
+  const share=(p,q)=>p.to===q.to||p.to===q.from||q.to===p.from||(p.from===q.from&&p.from);
+  for(let i=0;i<legs.length;i++)for(let j=i+1;j<legs.length;j++){
+    const p=legs[i],q=legs[j];if(share(p,q))continue;
+    if(segDist(p.x1,p.y1,p.x2,p.y2,q.x1,q.y1,q.x2,q.y2)<gap)return false;
+  }
+  for(const n of nodes){
+    if(n.k==='goal')continue;
+    const s=nodeSeg(n);
+    for(const l of legs){
+      if(l.to===n||l.from===n)continue;
+      if(segDist(s[0],s[1],s[2],s[3],l.x1,l.y1,l.x2,l.y2)<24)return false;
+    }
+    // own legs must not graze the node's other half
+    for(const l of legs){
+      if(l.to!==n&&l.from!==n)continue;
+      const d1=pSeg(l.x1,l.y1,s[0],s[1],s[2],s[3]),d2=pSeg(l.x2,l.y2,s[0],s[1],s[2],s[3]);
+      if(Math.min(d1,d2)>1&&false)return false;
+    }
+  }
+  return true;
+}
+
+// ---------- walls
+function toLocal(w,x,y){const a=-w.a*R,dx=x-w.x,dy=y-w.y;return [dx*Math.cos(a)-dy*Math.sin(a),dx*Math.sin(a)+dy*Math.cos(a)]}
+function wallPtDist(w,x,y){
+  const [u,v]=toLocal(w,x,y),du=Math.max(Math.abs(u)-w.w/2,0),dvv=Math.max(Math.abs(v)-w.h/2,0);
+  return Math.hypot(du,dvv);
+}
+function wallHitsSeg(w,x1,y1,x2,y2,m){
+  const [u1,v1]=toLocal(w,x1,y1),[u2,v2]=toLocal(w,x2,y2),hu=w.w/2+m,hv=w.h/2+m;
+  let t0=0,t1=1;const du=u2-u1,dvv=v2-v1;
+  for(const [p,d,h] of [[u1,du,hu],[v1,dvv,hv]]){
+    if(Math.abs(d)<1e-9){if(Math.abs(p)>h)return false}
+    else{let a=(-h-p)/d,b=(h-p)/d;if(a>b)[a,b]=[b,a];t0=Math.max(t0,a);t1=Math.min(t1,b);if(t0>t1)return false}
+  }
+  return true;
+}
+function wallInBoard(w){
+  const c=Math.cos(w.a*R),s=Math.sin(w.a*R);
+  for(const [u,v] of [[-1,-1],[1,-1],[1,1],[-1,1]]){
+    const x=w.x+u*w.w/2*c-v*w.h/2*s,y=w.y+u*w.w/2*s+v*w.h/2*c;
+    if(x<8||x>W-8||y<8||y>H-8)return false;
+  }
+  return true;
+}
+// keep: {legs:[{x1..y2}], pts:[[x,y,r]], walls:[...]}
+function wallClear(w,keep,beamHalf){
+  if(!wallInBoard(w))return false;
+  for(const l of keep.legs)if(wallHitsSeg(w,l.x1,l.y1,l.x2,l.y2,28+(beamHalf||0)))return false;
+  for(const [x,y,r] of keep.pts)if(wallPtDist(w,x,y)<r)return false;
+  for(const o of keep.walls)if(Math.hypot(o.x-w.x,o.y-w.y)<(o.h+w.h)/2*0.6+30)return false;
+  return true;
+}
+function addWalls(rnd,sp,keep,count,chord,beamHalf){
+  const walls=[];keep.walls=walls;
+  if(chord){
+    for(let t=0;t<30&&!walls.length;t++){
+      const f=rr(rnd,0.3,0.7),cx=chord[0]+(chord[2]-chord[0])*f,cy=chord[1]+(chord[3]-chord[1])*f;
+      const ang=Math.atan2(chord[3]-chord[1],chord[2]-chord[0])/R;
+      const w={t:'wall',x:Math.round(cx),y:Math.round(cy),w:30,h:5*ri(rnd,40,70),a:Math.round(ang/5)*5,fixed:1};
+      if(wallClear(w,keep,beamHalf))walls.push(w);
+    }
+  }
+  for(let t=0;t<200&&walls.length<count;t++){
+    const w={t:'wall',x:5*ri(rnd,14,186),y:5*ri(rnd,10,110),w:30,h:5*ri(rnd,20,50),a:15*ri(rnd,0,11),fixed:1};
+    if(wallClear(w,keep,beamHalf))walls.push(w);
+  }
+  for(const w of walls)sp.fix.push(w);
+}
+
+// ---------- spec helpers
+function newSpec(){return {emit:[],fix:[],mov:[],decoys:[],goals:[],legs:[],pts:[],meta:{},allowFail:0,wall:0}}
+function mirrorPiece(n){return {t:'mirror',x:n.x,y:n.y,a:turnMirror(n.din,n.dout)}}
+function legList(tree){return tree.legs.map(l=>({x1:l.x1,y1:l.y1,x2:l.x2,y2:l.y2}))}
+function nodePts(tree,r){return tree.nodes.map(n=>[n.x,n.y,r||80]).concat([[tree.sx,tree.sy,70]])}
+// pick spots on legs: returns [{x,y,d,leg}]
+function spots(rnd,tree,count,edge,apart,fromLegs){
+  const out=[];
+  const legs=(fromLegs||tree.legs).filter(l=>l.len>=2*edge+10);
+  if(!legs.length)return null;
+  for(let tries=0;tries<200&&out.length<count;tries++){
+    const l=pick(rnd,legs),u=rr(rnd,edge,l.len-edge),d=dv(l.d);
+    const x=l.x1+d[0]*u,y=l.y1+d[1]*u;
+    if(out.some(o=>Math.hypot(o.x-x,o.y-y)<apart))continue;
+    if(tree.nodes.some(n=>Math.hypot(n.x-x,n.y-y)<edge))continue;
+    out.push({x,y,d:l.d,leg:l});
+  }
+  return out.length===count?out:null;
+}
+function emitterAt(tree,band,extra){return Object.assign({t:'emit',x:tree.sx,y:tree.sy,a:tree.d0,band,fixed:1},extra||{})}
+function goalPiece(n,band,extra){return Object.assign({t:'goal',x:n.x,y:n.y,band,r:15,fixed:1},extra||{})}
+function addMov(sp,p,extra){sp.mov.push(Object.assign({p},extra||{}))}
+function makeGoal(sp,p,rl,extra){sp.goals.push(Object.assign({p,rl:rl||[13,16,20,25]},extra||{}))}
+function addTreePieces(sp,tree,opt){
+  // standard realisation: turn->mirror, branch->kind per opt.branch, goals via opt.goal(node)
+  for(const n of tree.nodes){
+    if(n.k==='turn')addMov(sp,mirrorPiece(n));
+    else if(n.k==='branch'){
+      const a=turnMirror(n.din,n.dside);
+      opt.branch(n,a);
+    }else opt.goal(n);
+  }
+}
+
+// ---------- assemble / evaluate
+function assemble(sp,st){
+  const arr=[];
+  for(const p of sp.emit)arr.push(clone(p));
+  for(const p of sp.fix)arr.push(clone(p));
+  sp.mov.forEach((m,i)=>{
+    const p=clone(m.p),s=st&&st[i];
+    if(s){p.x=s.x;p.y=s.y;if(s.a!==undefined)p.a=s.a;if(s.ax!==undefined)p.ax=s.ax}
+    arr.push(p);
+  });
+  for(const p of sp.decoys)arr.push(clone(p));
+  for(const g of sp.goals)arr.push(clone(g.p));
+  return arr;
+}
+function evalRaw(raw){return trace(raw.map(normalize))}
+function allLit(res){return res.length>0&&res.every(r=>r.lit)}
+const solved=(sp,st)=>allLit(evalRaw(assemble(sp,st)).res);
+
+function snapMov(sp){
+  for(const m of sp.mov){
+    const p=m.p;
+    if(p.rail===undefined){p.x=r5(p.x);p.y=r5(p.y)}
+    if(!DISCT[p.t]&&p.t!=='prism'&&!p.norot)p.a=r5(p.a);
+    if(DISCT[p.t])p.a=0;
+  }
+}
+function neighbours(sp){
+  const out=[];
+  sp.mov.forEach((m,i)=>{
+    const p=m.p,ds=p.rail!==undefined?(()=>{const c=Math.cos(p.rail*R),s=Math.sin(p.rail*R);return [[5*c,5*s],[-5*c,-5*s]]})():[[5,0],[-5,0],[0,5],[0,-5]];
+    for(const [dx,dy] of ds){
+      const st=sp.mov.map(mm=>({x:mm.p.x,y:mm.p.y}));
+      st[i]={x:p.x+dx,y:p.y+dy};out.push(st);
+    }
+  });
+  return out;
+}
+function robust(sp){
+  let bad=0;
+  for(const st of neighbours(sp))if(!allLit(evalRaw(assemble(sp,st)).res)&&++bad>sp.allowFail)return false;
+  return true;
+}
+function tune(sp){
+  const maxJ=Math.max(...sp.goals.map(g=>g.rl.length),1);
+  for(let j=0;j<maxJ;j++){
+    for(const g of sp.goals){g.p.r=g.rl[Math.min(j,g.rl.length-1)];if(!g.dark&&!sp.fixedNeed)g.p.need=0.03}
+    if(sp.hook&&!sp.hook(j))continue;
+    let res=evalRaw(assemble(sp)).res;
+    if(!allLit(res))continue;
+    if(!sp.fixedNeed){
+      sp.goals.forEach((g,i)=>{if(g.dark)return;const t=0.6*res[i].pct;let n=NICE[0];for(const v of NICE)if(v<=t)n=v;g.p.need=n});
+      res=evalRaw(assemble(sp)).res;
+      if(!allLit(res))continue;
+    }
+    if(robust(sp))return true;
+  }
+  return false;
+}
+
+// ---------- scatter movables into a start state
+function freeSpot(rnd,sp,taken,minD){
+  for(let t=0;t<120;t++){
+    const x=5*ri(rnd,12,188),y=5*ri(rnd,12,108);
+    if(sp.fix.some(f=>f.t==='wall'&&wallPtDist(f,x,y)<50))continue;
+    if(sp.emit.some(e=>Math.hypot(e.x-x,e.y-y)<80))continue;
+    if(sp.goals.some(g=>Math.hypot(g.p.x-x,g.p.y-y)<(g.p.r||15)+60))continue;
+    if(sp.fix.some(f=>f.t!=='wall'&&Math.hypot(f.x-x,f.y-y)<80))continue;
+    if(taken.some(q=>Math.hypot(q.x-x,q.y-y)<minD))continue;
+    return [x,y];
+  }
+  return null;
+}
+function scatter(rnd,sp){
+  const taken=sp.decoys.map(d=>({x:d.x,y:d.y})),st=[];
+  for(const m of sp.mov){
+    const p=m.p;
+    if(m.startPos){st.push({x:m.startPos[0],y:m.startPos[1],a:p.a,ax:p.ax});taken.push({x:m.startPos[0],y:m.startPos[1]});continue}
+    let pos=null;
+    for(let t=0;t<30&&!pos;t++){
+      const q=freeSpot(rnd,sp,taken,95);
+      if(q&&Math.hypot(q[0]-p.x,q[1]-p.y)>=110)pos=q;
+    }
+    if(!pos)return null;
+    taken.push({x:pos[0],y:pos[1]});
+    const s={x:pos[0],y:pos[1],a:p.a,ax:p.ax};
+    if(!DISCT[p.t]&&!p.norot&&p.t!=='prism'){
+      let a;do{a=15*ri(rnd,-5,6)}while(Math.abs(m180(a-p.a))<30);s.a=a;
+    }
+    if(p.t==='prism')s.a=5*ri(rnd,0,23);
+    if(DIALV[p.t]&&p.ax!==undefined){
+      let v;do{v=pick(rnd,DIALV[p.t])}while(v===p.ax);s.ax=v;
+    }
+    st.push(s);
+  }
+  return st;
+}
+function decoyPieces(rnd,sp,types,count){
+  const taken=[];
+  for(let i=0;i<count;i++){
+    const q=freeSpot(rnd,sp,taken,95);if(!q)return false;
+    taken.push({x:q[0],y:q[1]});
+    const t=pick(rnd,types);
+    sp.decoys.push({t,x:q[0],y:q[1],a:15*ri(rnd,-5,6)});
+  }
+  return true;
+}
+
+function finish(rnd,sp,meta){
+  snapMov(sp);
+  for(const g of sp.goals){g.p.x=r5(g.p.x);g.p.y=r5(g.p.y)}
+  for(const e of sp.emit){e.x=r5(e.x);e.y=r5(e.y)}
+  if(!tune(sp))return null;
+  const st=scatter(rnd,sp);if(!st)return null;
+  if(solved(sp,st))return null;
+  // every movable must matter
+  for(let i=0;i<sp.mov.length;i++){
+    const t=sp.mov.map((m,k)=>k===i?st[k]:null).map((s,k)=>s||{x:sp.mov[k].p.x,y:sp.mov[k].p.y,a:sp.mov[k].p.a,ax:sp.mov[k].p.ax});
+    if(solved(sp,t))return null;
+  }
+  const pieces=assemble(sp,st);
+  const base=sp.emit.length+sp.fix.length,sol={};
+  sp.mov.forEach((m,i)=>{
+    const p=m.p,a=DISCT[p.t]?0:p.a,e=[Math.round(p.x*10)/10,Math.round(p.y*10)/10,a];
+    if(p.ax!==undefined&&DIALV[p.t])e.push(p.ax);
+    sol[base+i]=e;
+  });
+  const lv={name:meta.name,hint:meta.hint,pieces,sol};
+  if(meta.pol)lv.pol=1;
+  if(meta.coh)lv.coh=1;
+  return lv;
+}
+
+// ---------- families
+const NAMES={
+  relay:['Dogleg','Switchback','Zigzag','Hairpin','Detour','Ricochet','Slalom','Chicane','Dead reckoning','Long way round','Bank shot','Corkscrew','Backtrack','Crossfire','Labyrinth','Pinball','Scenic route','Looking glass','Hall of mirrors','Round the houses'],
+  filter:['Tinted path','Colour gate','Sieve','Narrow band','Sift','Gel stack','Pure tone','Stained glass','Single hue','Colour check','Lens cap','Gel pack','Tint test','Pass band'],
+  rail:['On rails','Slide rule','Track team','Sliding scale','Tramline','Drawer','Trombone','Shuttle','Funicular','Gantry','Conveyor','Cable car'],
+  fan:['Family tree','Branching out','Fork in the road','Shared load','Delta','Spreading news','Many hands','Cascade','Root system','Splitting hairs','Divide and light','Tributaries','Sunburst','Candelabra','Light sharing','Chain letter','Hydra','Three-way street'],
+  sorter:['Spectrum sort','Colour sorter','Sorting hat','Dichroic maze','Split palette','Rainbow rack','Chromatic sort','Prism free','Wavelength lottery','Sort of bright','Colour wheel','Paint chart','Hue and cry','Stained sort','Palette knife','Spectral shelf'],
+  combine:['Melting pot','Merge lane','Colour mixer','Funnel','Two become one','Rendezvous','Convergence','Blend','Coalesce','Meeting point','Mixing desk','Union','Slot machine','Rejoin','Through the slit','Bottleneck'],
+  prism:['Rainbow chase','Dispersion','Pick a colour','Newton\u2019s trick','Spectral line','Dark side','Glass act','Fringe','Spread the light','Triangle','Roy G. Biv','Cut glass','Crystal clear','Pink Floyd','Chasing rainbows','Dispersal','Glass wedge','Colour fan'],
+  orb:['Glass ball','Crystal ball','Marble','Dewdrop','Raindrop','Bubble','Fisheye','Snow globe','Fishbowl','Sphere of influence','Pearl','Bead','Droplet','Orbital','Cat\u2019s eye','Moonstone','Globe trotter','Rolling stone','Water drop','Glass eye','Gumball','Planetarium','Round trip','Full circle','Bauble','Sea glass','Orb weaver','Ball bearing','Pebble','Looking sphere'],
+  focus:['Burning glass','Sharp focus','Pinpoint','Magnifier','Bullseye','Hot spot','Fine point','Spotlight','Zoom in','Focal point','Sunbeam','Magnify','Convergent','Tight beam','Laser pointer','Hit the dot','Ignition','Burning question'],
+  zoom:['Zoom lens','Squeeze play','Variable focus','Telephoto','Autofocus','Dial a focus','Rack focus','Bellows','Focus puller','Eyepiece','Iris','Adjustable','Pull focus','Macro','Sliding scale II','Rubber lens'],
+  spread:['Fan out','Wide angle','Spread thin','Broadcast','Diverge','Peacock','Floodlight','Sprinkler','Starburst','Open wide','Scatter','Umbrella','Spotlight reverse','Wide load'],
+  pinhole:['Pinhole camera','Keyhole','Needle\u2019s eye','Spatial filter','Squeeze play','Eye of the storm','Tight spot','Aperture','Narrow gap','Slit lamp','Thread the needle','Cleaned up','Eye of the needle','Single slit'],
+  polchain:['Crossed paths','Gradual turn','Step stool','Half-turns','Stair-step','Malus\u2019s ladder','Quarter turns','Polar bear','Slow rotation','Stepping stones','Polarity','Twist and shout','Gentle persuasion','Little by little','Turnstile','Ratchet','Spiral stair','Baby steps'],
+  polsplit:['Even odds','Fair split','Polar split','Balance sheet','Dividing line','Twin beams','Sharing out','Axis of evil','Split the difference','Two ways','Coin toss','Halves','Polar fork','Beam splitter','Equal shares','Fifty-fifty','Lopsided','Ratio'],
+  mz:['Twin arms','Phase shift','Fringe benefits','Null result','Equal arms','Wave dance','In step','Cancel culture','Echo chamber','Phase two','Quiet port','Out of phase','Destructive','Square dance','Racetrack','Beat the clock','Hush','Wavefront','Dark fringe','Bright fringe'],
+  mich:['Mirror image','Interference slide','Arm wrestling','Fringe counter','Slide and see','Two mirrors','Path length','Optical flat','Michelson\u2019s mirrors','Ether wind','Null test','Slide rule II','Standing wave','Tuning fork']
+};
+const HINT={
+  relay:'Bounce the beam around the walls and into the target.',
+  filter:'White light in, one color out. A filter passes only its band.',
+  rail:'A mirror on a rail slides but cannot turn. Slide it into the beam.',
+  fan:'A splitter sends half the light each way. Every target needs some.',
+  sorter:'A dichroic mirror reflects its colors and passes the rest. Send each color to its own target.',
+  combine:'Merge the beams so every color passes through the slot.',
+  orb:'A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.',
+  prism:'Glass bends each color differently. Find the angle that sends only the target color in.',
+  zoom:'This lens squeezes to any focal length. Slide it and set its dial so the focus lands on the target.',
+  spread:'A concave lens spreads light apart. Place it so the beam reaches every target.',
+  zoomspread:'Squeeze the lens to the right strength and slide it until the beam reaches every target.',
+  focus:'The lens focuses parallel light at its focal length behind it. Put the focus on the target.',
+  pinhole:'Focus the beam through the gap, then straighten it out again.',
+  polchain:'The beam must pass the last polarizer. Turn the axes in small steps.',
+  polsplit:'A polarizing splitter divides light by polarization. Balance the halves.',
+  mz:'Delay one arm so the right port lights and the other stays dark.',
+  mich:'Slide the mirrors along their rails until the detector lights up.'
+};
+const pickName=(rnd,k)=>pick(rnd,NAMES[k]);
+
+function famRelay(rnd,c){
+  const v=c<2?'plain':pick(rnd,['plain','filter','rail','filter','rail']);
+  const T=Math.min(6,c+1+ri(rnd,0,1));
+  const tree=growTree(rnd,{turns:T,minL:c>3?100:120,maxL:c>3?250:300});
+  if(!tree)return null;
+  const sp=newSpec();
+  const band=pick(rnd,[RED,GRN,BLU]);
+  let fb=null;
+  if(v==='filter'){fb=pick(rnd,[RED,GRN,BLU]);sp.emit.push(emitterAt(tree,WHITE))}else sp.emit.push(emitterAt(tree,band));
+  const turns=tree.nodes.filter(n=>n.k==='turn');
+  let railNode=null;
+  if(v==='rail')railNode=turns[turns.length-1];
+  for(const n of tree.nodes){
+    if(n.k==='turn'){
+      const p=mirrorPiece(n);
+      if(n===railNode){
+        const rho=n360(n.din+90),t=5*ri(rnd,8,24)*pick(rnd,[-1,1]),d=dv(rho);
+        const ox=Math.round(n.x-t*d[0]),oy=Math.round(n.y-t*d[1]);
+        if(!inB(ox,oy,35))return null;
+        p.rail=rho;p.range=150;p.norot=1;
+        const px=ox+d[0]*t,py=oy+d[1]*t;
+        addMov(sp,Object.assign(p,{x:px,y:py}),{startPos:[ox,oy]});
+      }else addMov(sp,p);
+    }else makeGoal(sp,goalPiece(n,fb||band,fb?{ex:1}:{}),[13,16,20,25]);
+  }
+  if(fb){
+    const s=spots(rnd,tree,1,70,90);if(!s)return null;
+    addMov(sp,{t:'filter',x:s[0].x,y:s[0].y,a:r5(m180(s[0].d+90)),band:fb,len:80});
+  }
+  const goal=tree.nodes.find(n=>n.k==='goal');
+  const keep={legs:legList(tree),pts:nodePts(tree,80),walls:[]};
+  addWalls(rnd,sp,keep,c<2?1:(c<4?2:3),[tree.sx,tree.sy,goal.x,goal.y]);
+  if(c>=3&&rnd()<0.5)decoyPieces(rnd,sp,['mirror'],1);
+  const key=v==='plain'?'relay':v;
+  return {sp,meta:{name:pickName(rnd,key),hint:HINT[key]}};
+}
+
+function famFan(rnd,c){
+  const m=[1,1,2,2,3][c-1]+(c===2||c===4?ri(rnd,0,1):0);
+  const tree=growTree(rnd,{splits:m,turns:Math.min(4,c-1+ri(rnd,0,1)),minL:110,maxL:260,tries:900});
+  if(!tree)return null;
+  const sp=newSpec(),band=pick(rnd,[RED,GRN,BLU,MONO]);
+  sp.emit.push(emitterAt(tree,band));
+  addTreePieces(sp,tree,{
+    branch:(n,a)=>addMov(sp,{t:'split',x:n.x,y:n.y,a}),
+    goal:n=>makeGoal(sp,goalPiece(n,band),[13,16,20,25])
+  });
+  const keep={legs:legList(tree),pts:nodePts(tree,80),walls:[]};
+  const gs=tree.nodes.filter(n=>n.k==='goal');
+  addWalls(rnd,sp,keep,c<2?1:2,[tree.sx,tree.sy,gs[0].x,gs[0].y]);
+  if(c>=3&&rnd()<0.5)decoyPieces(rnd,sp,['mirror','split'],1);
+  return {sp,meta:{name:pickName(rnd,'fan'),hint:HINT.fan}};
+}
+
+function famSorter(rnd,c){
+  const m=[1,2,2,3,3][c-1];
+  const tree=growTree(rnd,{splits:m,turns:Math.min(3,c-1+ri(rnd,0,1)),minL:120,maxL:260,tries:900});
+  if(!tree)return null;
+  const sp=newSpec();sp.emit.push(emitterAt(tree,WHITE));
+  const count=nd=>nd.k==='goal'?1:nd.k==='turn'?count(nd.next):count(nd.a)+count(nd.b);
+  const bands=new Map();
+  const edge=i=>i<=0?400:(i>=NW1?700:WL[i]-3.8);
+  const NW1=WL.length-1;
+  const assign=(nd,lo,hi)=>{
+    if(nd.k==='goal'){bands.set(nd,[lo,hi]);return}
+    if(nd.k==='turn'){assign(nd.next,lo,hi);return}
+    const na=count(nd.a),nb=count(nd.b),tot=hi-lo+1,wb=Math.round(tot*nb/(na+nb));
+    if(wb<5||tot-wb<5){bands.fail=true;return}
+    if(rnd()<0.5){nd.refl=[lo,lo+wb-1];assign(nd.b,lo,lo+wb-1);assign(nd.a,lo+wb,hi)}
+    else{nd.refl=[hi-wb+1,hi];assign(nd.b,hi-wb+1,hi);assign(nd.a,lo,hi-wb)}
+  };
+  assign(tree.first,0,NW1);if(bands.fail)return null;
+  const toBand=r=>[r[0]<=0?400:WL[r[0]]-3.8,r[1]>=NW1?700:WL[r[1]]+3.8];
+  addTreePieces(sp,tree,{
+    branch:(n,a)=>addMov(sp,{t:'dichro',x:n.x,y:n.y,a,band:toBand(n.refl)}),
+    goal:n=>makeGoal(sp,goalPiece(n,toBand(bands.get(n)),{ex:1}),[13,16,20,25])
+  });
+  const keep={legs:legList(tree),pts:nodePts(tree,80),walls:[]};
+  const gs=tree.nodes.filter(n=>n.k==='goal');
+  addWalls(rnd,sp,keep,c<2?1:2,[tree.sx,tree.sy,gs[0].x,gs[0].y]);
+  if(c>=4&&rnd()<0.5)decoyPieces(rnd,sp,['mirror'],1);
+  return {sp,meta:{name:pickName(rnd,'sorter'),hint:HINT.sorter}};
+}
+
+function famCombine(rnd,c){
+  const nc=c>=4?3:2;
+  const bandsAll=shuffle(rnd,[RED,GRN,BLU]).slice(0,nc);
+  // common beam: tree chain after the merge point
+  const T=Math.min(3,c-1+ri(rnd,0,1));
+  const tree=growTree(rnd,{turns:T,minL:140,maxL:260,firstL:5*ri(rnd,40,56)});
+  if(!tree)return null;
+  const leg0=tree.legs[0],d=dv(tree.d0);
+  const sp=newSpec();
+  sp.emit.push(emitterAt(tree,bandsAll[0]));
+  // dichroics sit on the first leg, side emitters feed them
+  const spts=[0.45,0.8].slice(0,nc-1);
+  const sides=[];
+  for(let k=0;k<nc-1;k++){
+    const u=leg0.len*spts[k],px=leg0.x1+d[0]*u,py=leg0.y1+d[1]*u;
+    const sd=pick(rnd,[-1,1]),din=n360(tree.d0+sd*90);
+    // beam from side emitter travels toward the dichroic, straight along din
+    const L=5*ri(rnd,34,56),ex=px-Math.cos(din*R)*L,ey=py-Math.sin(din*R)*L;
+    if(!inB(ex,ey,40))return null;
+    sides.push({px,py,din,ex,ey});
+    sp.emit.push({t:'emit',x:ex,y:ey,a:din,band:bandsAll[k+1],fixed:1});
+    addMov(sp,{t:'dichro',x:px,y:py,a:turnMirror(din,tree.d0),band:bandsAll[k+1]});
+  }
+  // check side emitter spacing against everything
+  for(const s of sides){
+    if(tree.nodes.some(n=>Math.hypot(n.x-s.ex,n.y-s.ey)<90))return null;
+    if(Math.hypot(tree.sx-s.ex,tree.sy-s.ey)<120)return null;
+    for(const l of tree.legs.slice(1))if(pSeg(s.ex,s.ey,l.x1,l.y1,l.x2,l.y2)<60)return null;
+  }
+  if(sides.length===2&&Math.hypot(sides[0].ex-sides[1].ex,sides[0].ey-sides[1].ey)<100)return null;
+  for(const n of tree.nodes){
+    if(n.k==='turn')addMov(sp,mirrorPiece(n));
+    else makeGoal(sp,goalPiece(n,WHITE,{bands:bandsAll.slice()}),[16,20,25,30],{});
+  }
+  for(const g of sp.goals)delete g.p.band;
+  const last=tree.legs[tree.legs.length-1],ld=dv(last.d);
+  // slot walls across the last leg
+  const sl=ri(rnd,0,1),u0=last.len*0.55;
+  const cx=last.x1+ld[0]*u0,cy=last.y1+ld[1]*u0,gapW=5*ri(rnd,14,18),hw=5*ri(rnd,30,40);
+  const nx=-ld[1],ny=ld[0];
+  const wa=Math.round(last.d/5)*5;
+  const w1={t:'wall',x:Math.round(cx+nx*(gapW/2+hw/2)),y:Math.round(cy+ny*(gapW/2+hw/2)),w:30,h:hw,a:wa,fixed:1};
+  const w2={t:'wall',x:Math.round(cx-nx*(gapW/2+hw/2)),y:Math.round(cy-ny*(gapW/2+hw/2)),w:30,h:hw,a:wa,fixed:1};
+  if(!wallInBoard(w1)||!wallInBoard(w2))return null;
+  void sl;
+  sp.fix.push(w1,w2);
+  const keep={legs:legList(tree).concat(sides.map(s=>({x1:s.ex,y1:s.ey,x2:s.px,y2:s.py}))),pts:nodePts(tree,80),walls:[w1,w2]};
+  addWalls(rnd,sp,keep,c<3?0:1,null);
+  keep.walls=sp.fix.filter(w=>w.t==='wall');
+  return {sp,meta:{name:pickName(rnd,'combine'),hint:HINT.combine}};
+}
+
+function famFocus(rnd,c,zoom){
+  const S=c>=4?1:0,T=Math.min(4,c-1+ri(rnd,0,1));
+  const tree=growTree(rnd,{splits:S,turns:T,minL:150,maxL:280,legGap:70,tries:900});
+  if(!tree)return null;
+  const sp=newSpec(),band=pick(rnd,[RED,GRN,BLU]);
+  const w=5*ri(rnd,8,14);
+  sp.emit.push(emitterAt(tree,band,{w,nb:9}));
+  const f=zoom?pick(rnd,[100,130,170,230,340]):pick(rnd,c<2?[160]:[100,120,160,200,240,300]);
+  addTreePieces(sp,tree,{
+    branch:(n,a)=>addMov(sp,{t:'split',x:n.x,y:n.y,a}),
+    goal:n=>{
+      makeGoal(sp,goalPiece(n,band,{show:1}),[7,9,12,15,19]);
+      // lens f before the goal, walking back along the chain
+      let rem=f,cur=n,pos=null;
+      for(let g=0;g<6;g++){
+        const leg=tree.legs.find(l=>l.to===cur);
+        const along=leg.len-rem;
+        if(along>=75&&rem>=75){const d=dv(leg.d);pos={x:leg.x1+d[0]*along,y:leg.y1+d[1]*along,d:leg.d};break}
+        if(along>=75&&rem<75)break;
+        rem-=leg.len;cur=cur.par;
+        if(!cur||cur.k==='branch')break;
+      }
+      if(!pos){sp.bad=true;return}
+      if(zoom)addMov(sp,{t:'zlens',x:pos.x,y:pos.y,a:r5(m180(pos.d+90)),ax:E.ZF.indexOf(f)*22.5});
+      else addMov(sp,{t:'lens',x:pos.x,y:pos.y,a:r5(m180(pos.d+90)),f});
+    }
+  });
+  if(sp.bad)return null;
+  for(const m of sp.mov)if(/lens$/.test(m.p.t))for(const o of sp.mov)if(o!==m&&!/lens$/.test(o.p.t)&&Math.hypot(o.p.x-m.p.x,o.p.y-m.p.y)<80)return null;
+  const gs=tree.nodes.filter(n=>n.k==='goal');
+  const keep={legs:legList(tree),pts:nodePts(tree,80).concat(sp.mov.filter(m=>/lens$/.test(m.p.t)).map(m=>[m.p.x,m.p.y,60])),walls:[]};
+  addWalls(rnd,sp,keep,c<3?1:2,[tree.sx,tree.sy,gs[0].x,gs[0].y],w/2);
+  return {sp,meta:{name:pickName(rnd,zoom?'zoom':'focus'),hint:zoom?HINT.zoom:HINT.focus}};
+}
+
+
+function famSpread(rnd,c){
+  const f=-pick(rnd,c<2?[90]:[60,75,90,110,140]);
+  const u1=5*ri(rnd,16,30),Dg=5*ri(rnd,60,90);
+  const tree=growTree(rnd,{turns:0,firstL:u1+Dg+60,legGap:60,tries:900});
+  if(!tree)return null;
+  const sp=newSpec(),band=pick(rnd,[RED,GRN,BLU]);
+  const wB=30;
+  sp.emit.push(emitterAt(tree,band,{w:wB,nb:25}));
+  const l0=tree.legs[0],d=dv(l0.d),n=[-d[1],d[0]];
+  const lx=l0.x1+d[0]*u1,ly=l0.y1+d[1]*u1,zoom=c>=3&&rnd()<0.5;
+  const lens=zoom?{t:'zlens',x:lx,y:ly,a:r5(m180(l0.d+90)),ax:E.ZF.indexOf(pick(rnd,[-60,-80,-100,-130]))*22.5}:{t:'lens',x:lx,y:ly,a:r5(m180(l0.d+90)),f};
+  const fl=zoom?E.ZF[Math.round(lens.ax/22.5)]:f;
+  addMov(sp,lens);
+  const lat=0.75*(wB/2)*Dg/Math.abs(fl);
+  const k=c>=4?3:2,offs=k===2?[-lat,lat]:[-lat,0,lat];
+  for(const o of offs){
+    const gx=lx+d[0]*Dg+n[0]*o,gy=ly+d[1]*Dg+n[1]*o;
+    if(!inB(gx,gy,40))return null;
+    makeGoal(sp,{t:'goal',x:gx,y:gy,band,r:24,need:0.05,show:1,fixed:1},[20,24,28,32]);
+  }
+  const keep={legs:legList(tree),pts:[[tree.sx,tree.sy,70],[lx,ly,60]],walls:[]};
+  for(const g of sp.goals)keep.pts.push([g.p.x,g.p.y,60]);
+  addWalls(rnd,sp,keep,c<3?1:2,null,wB/2);
+  return {sp,meta:{name:pickName(rnd,zoom?'zoom':'spread'),hint:zoom?HINT.zoomspread:HINT.spread}};
+}
+
+function famPinhole(rnd,c){
+  const f1=5*ri(rnd,20,30),f2=5*ri(rnd,20,30);
+  const T=c<3?0:Math.min(2,c-2);
+  const need=70+f1+f2+90;
+  const tree=growTree(rnd,{turns:T,firstL:need+5*ri(rnd,0,12),minL:150,maxL:260,legGap:70,tries:900});
+  if(!tree)return null;
+  const sp=newSpec(),band=pick(rnd,[RED,GRN,BLU]);
+  const wBeam=5*ri(rnd,12,18);
+  sp.emit.push(emitterAt(tree,band,{w:wBeam,nb:11}));
+  const l0=tree.legs[0],d=dv(l0.d),u1=70+5*ri(rnd,0,6);
+  const lens1={x:l0.x1+d[0]*u1,y:l0.y1+d[1]*u1},slit={x:lens1.x+d[0]*f1,y:lens1.y+d[1]*f1},lens2={x:slit.x+d[0]*f2,y:slit.y+d[1]*f2};
+  addMov(sp,{t:'lens',x:lens1.x,y:lens1.y,a:r5(m180(l0.d+90)),f:f1});
+  addMov(sp,{t:'lens',x:lens2.x,y:lens2.y,a:r5(m180(l0.d+90)),f:f2});
+  const gapW=5*ri(rnd,6,9),hw=5*ri(rnd,30,40),nx=-d[1],ny=d[0],wa=Math.round(l0.d/5)*5;
+  const w1={t:'wall',x:Math.round(slit.x+nx*(gapW/2+hw/2)),y:Math.round(slit.y+ny*(gapW/2+hw/2)),w:30,h:hw,a:wa,fixed:1};
+  const w2={t:'wall',x:Math.round(slit.x-nx*(gapW/2+hw/2)),y:Math.round(slit.y-ny*(gapW/2+hw/2)),w:30,h:hw,a:wa,fixed:1};
+  if(!wallInBoard(w1)||!wallInBoard(w2))return null;
+  sp.fix.push(w1,w2);
+  for(const n of tree.nodes){
+    if(n.k==='turn')addMov(sp,mirrorPiece(n));
+    else makeGoal(sp,goalPiece(n,band,{show:1}),[30,36,42,50]);
+  }
+  const keep={legs:legList(tree),pts:nodePts(tree,80).concat([[lens1.x,lens1.y,60],[lens2.x,lens2.y,60]]),walls:[w1,w2]};
+  const before=sp.fix.length;
+  addWalls(rnd,sp,keep,c<3?0:1,null,wBeam/2);
+  void before;
+  return {sp,meta:{name:pickName(rnd,'pinhole'),hint:HINT.pinhole}};
+}
+
+function famPolChain(rnd,c){
+  const opts=c<2?[[0,1]]:c<4?[[0,1],[0,3],[0,2]]:[[0,3],[0,2],[0,3]];
+  const [,k]=pick(rnd,opts);
+  const th0=pick(rnd,[0,22.5,45,67.5,90,112.5,135,157.5]);
+  const thf=(th0+90)%180;
+  const T=Math.min(4,c-1+ri(rnd,0,1));
+  const tree=growTree(rnd,{turns:T,minL:210,maxL:300,tries:900});
+  if(!tree)return null;
+  const sp=newSpec();sp.meta.pol=1;
+  sp.emit.push(emitterAt(tree,MONO,{pol:th0}));
+  for(const n of tree.nodes){
+    if(n.k==='turn')addMov(sp,mirrorPiece(n));
+    else makeGoal(sp,goalPiece(n,MONO,{show:1}),[15,18,22]);
+  }
+  const lastLeg=tree.legs[tree.legs.length-1],dl=dv(lastLeg.d);
+  // analyzer fixed 90 deg from the source, 80 before the goal
+  const ax0=lastLeg.len>=200?lastLeg.len-85:null;
+  if(ax0===null)return null;
+  sp.fix.push({t:'pol',x:lastLeg.x1+dl[0]*ax0,y:lastLeg.y1+dl[1]*ax0,a:0,ax:thf,fixed:1});
+  const used=[{x:sp.fix[0].x,y:sp.fix[0].y}];
+  const sps=spots(rnd,tree,k,70,95);
+  if(!sps)return null;
+  for(const s of sps)if(used.some(u=>Math.hypot(u.x-s.x,u.y-s.y)<90))return null;
+  // axes ordered along the beam path: sort spots by their position in the tree
+  const order=s=>tree.legs.indexOf(s.leg)*1000+Math.hypot(s.x-s.leg.x1,s.y-s.leg.y1);
+  sps.sort((a,b)=>order(a)-order(b));
+  sps.forEach((s,i)=>{
+    const ax=(th0+90*(i+1)/(k+1))%180;
+    addMov(sp,{t:'pol',x:s.x,y:s.y,a:0,ax,r:30});
+  });
+  const keep={legs:legList(tree),pts:nodePts(tree,80).concat(sps.map(s=>[s.x,s.y,60])).concat([[sp.fix[0].x,sp.fix[0].y,60]]),walls:[]};
+  const goal=tree.nodes.find(n=>n.k==='goal');
+  addWalls(rnd,sp,keep,c<3?1:2,[tree.sx,tree.sy,goal.x,goal.y]);
+  return {sp,meta:{name:pickName(rnd,'polchain'),hint:HINT.polchain,pol:1}};
+}
+
+function famPolSplit(rnd,c){
+  const m=c<3?1:2;
+  const tree=growTree(rnd,{splits:m,turns:Math.min(2,c-1),minL:210,maxL:300,tries:900});
+  if(!tree)return null;
+  const sp=newSpec();
+  const th0=pick(rnd,[0,45,90,135]);
+  sp.emit.push(emitterAt(tree,MONO,{pol:th0}));
+  const polIn=new Map();
+  const walk=(nd,pol)=>{
+    if(nd.k==='goal')return;
+    if(nd.k==='turn'){walk(nd.next,pol);return}
+    // branch: choose axis & offset so (alpha+off+pol)/2 is on the dial grid
+    for(let t=0;t<60;t++){
+      const alpha=pick(rnd,DIALV.pbs),off=pick(rnd,c<3?[45]:[45,22.5,67.5]);
+      const h=(alpha+off+pol)/2;
+      for(const hax of [h,h+90]){
+        const hm=((hax%180)+180)%180;
+        if(Math.abs(hm/22.5-Math.round(hm/22.5))<1e-9){nd.alpha=alpha;nd.hax=hm;break}
+      }
+      if(nd.alpha!==undefined)break;
+    }
+    if(nd.alpha===undefined){sp.bad=true;return}
+    walk(nd.a,nd.alpha);walk(nd.b,(nd.alpha+90)%180);
+  };
+  walk(tree.first,th0);if(sp.bad)return null;
+  const hspots=[];
+  addTreePieces(sp,tree,{
+    branch:(n,a)=>{
+      addMov(sp,{t:'pbs',x:n.x,y:n.y,a,ax:n.alpha});
+      const leg=tree.legs.find(l=>l.to===n),d=dv(leg.d),u=leg.len-95;
+      if(u<70){sp.bad=true;return}
+      hspots.push([leg.x1+d[0]*u,leg.y1+d[1]*u]);
+      addMov(sp,{t:'hwp',x:leg.x1+d[0]*u,y:leg.y1+d[1]*u,a:0,ax:n.hax,r:30});
+    },
+    goal:n=>makeGoal(sp,goalPiece(n,MONO,{show:1}),[15,18,22])
+  });
+  if(sp.bad)return null;
+  const keep={legs:legList(tree),pts:nodePts(tree,80).concat(hspots.map(h=>[h[0],h[1],60])),walls:[]};
+  const gs=tree.nodes.filter(n=>n.k==='goal');
+  addWalls(rnd,sp,keep,c<3?1:2,[tree.sx,tree.sy,gs[0].x,gs[0].y]);
+  sp.meta.pol=1;
+  return {sp,meta:{name:pickName(rnd,'polsplit'),hint:HINT.polsplit,pol:1}};
+}
+
+// hand-built interferometer skeletons
+function flipSpec(sp,fx,fy){
+  const f=p=>{
+    if(fx){p.x=W-p.x;p.a=180-(p.a||0);if(p.startPos)p.startPos[0]=W-p.startPos[0];if(p.rail!==undefined)p.rail=180-p.rail}
+    if(fy){p.y=H-p.y;p.a=-(p.a||0);if(p.rail!==undefined)p.rail=-p.rail}
+    if(p.a!==undefined&&!DISCT[p.t])p.a=m180(p.a)
+  };
+  sp.emit.forEach(f);sp.fix.forEach(f);sp.mov.forEach(m=>{f(m.p);if(m.startPos){if(fx)m.startPos[0]=W-m.startPos[0];if(fy)m.startPos[1]=H-m.startPos[1]}});
+  sp.decoys.forEach(f);sp.goals.forEach(g=>f(g.p));
+}
+function searchDials(rnd,sp,idx,cap){
+  const sols=[],lists=idx.map(i=>DIALV[sp.mov[i].p.t]);
+  const total=lists.reduce((a,l)=>a*l.length,1);
+  const cur=sp.mov.map(m=>({x:m.p.x,y:m.p.y,a:m.p.a,ax:m.p.ax}));
+  const rec=k=>{
+    if(sols.length>=cap)return;
+    if(k===idx.length){if(allLit(evalRaw(assemble(sp,cur)).res))sols.push(idx.map(i=>cur[i].ax));return}
+    for(const v of lists[k]){cur[idx[k]].ax=v;rec(k+1)}
+  };
+  rec(0);void total;
+  return sols;
+}
+function famMZ(rnd,c){
+  const x0=25*ri(rnd,8,14),y0=25*ri(rnd,3,5),y1=y0+25*ri(rnd,9,13);
+  const x1=x0+25*ri(rnd,14,Math.min(24,Math.floor((830-x0)/25)-x0/25*0));
+  if(x1>830||y1>450||x1-x0<350)return null;
+  const ex=25*ri(rnd,2,3),sp=newSpec();
+  sp.coh=1;
+  sp.emit.push({t:'emit',x:ex*4,y:y0,a:0,band:MONO,fixed:1});
+  sp.fix.push({t:'split',x:x0,y:y0,a:45,fixed:1},{t:'mirror',x:x1,y:y0,a:45,fixed:1},{t:'split',x:x1,y:y1,a:45,fixed:1},{t:'mirror',x:x0,y:y1,a:45,fixed:1});
+  // arms: top y0, bottom y1 (x0..x1), left x0, right x1
+  const arm=()=>{
+    const k=ri(rnd,0,3);
+    if(k===0)return [x0+25*ri(rnd,3,Math.max(3,(x1-x0)/25-3)),y0];
+    if(k===1)return [x0+25*ri(rnd,3,Math.max(3,(x1-x0)/25-3)),y1];
+    if(k===2)return [x0,y0+25*ri(rnd,2,Math.max(2,(y1-y0)/25-2))];
+    return [x1,y0+25*ri(rnd,2,Math.max(2,(y1-y0)/25-2))];
+  };
+  const nFixed=c>=3?ri(rnd,1,2):0,nMov=c<2?1:c<4?2:3;
+  const pts=[];
+  const free=p=>pts.every(q=>Math.hypot(q[0]-p[0],q[1]-p[1])>=65);
+  const place=()=>{for(let t=0;t<30;t++){const p=arm();if(free(p)){pts.push(p);return p}}return null};
+  for(let i=0;i<nFixed;i++){const p=place();if(!p)return null;sp.fix.push({t:'phase',x:p[0],y:p[1],a:0,ax:pick(rnd,DIALV.phase.slice(1)),fixed:1})}
+  const idx=[];
+  for(let i=0;i<nMov;i++){const p=place();if(!p)return null;idx.push(sp.mov.length);addMov(sp,{t:'phase',x:p[0],y:p[1],a:0,ax:0})}
+  const port=pick(rnd,['R','B']),gR={x:x1+200,y:y1},gB={x:x1,y:y1+105};
+  if(gB.y>570||gR.x>960)return null;
+  const mode=pick(rnd,c<2?['bright']:['bright','dark','half']);
+  const mk=(pos,extra)=>makeGoal(sp,Object.assign({t:'goal',x:pos.x,y:pos.y,band:MONO,coh:1,r:15,fixed:1,show:1},extra),[15],{dark:!!extra.dark});
+  if(mode==='bright')mk(port==='R'?gR:gB,{need:0.8});
+  else if(mode==='dark'){mk(gR,port==='R'?{need:0.8}:{dark:1});mk(gB,port==='R'?{dark:1}:{need:0.8});}
+  else {mk(gR,{need:0.4});mk(gB,{need:0.4})}
+  sp.fixedNeed=true;
+  snapMov(sp);
+  const sols=searchDials(rnd,sp,idx,40);
+  if(!sols.length)return null;
+  const s=pick(rnd,sols);idx.forEach((i,k)=>{sp.mov[i].p.ax=s[k]});
+  sp.coh=1;
+  const fx=rnd()<0.5,fy=rnd()<0.5;
+  if(fx||fy)flipSpec(sp,fx,fy);
+  return {sp,meta:{name:pickName(rnd,'mz'),hint:mode==='bright'?'Delay an arm so the beams arrive in step at the lit port.':HINT.mz,coh:1}};
+}
+
+function famMich(rnd,c){
+  const sx=25*ri(rnd,10,16),sy=25*ri(rnd,8,12);
+  const La=25*ri(rnd,8,13),Lb=25*ri(rnd,5,8),Lc=25*ri(rnd,6,8);
+  const sp=newSpec();
+  sp.coh=1;
+  if(sy-Lc<60||sy+Lb>560||sx+La>940)return null;
+  sp.emit.push({t:'emit',x:sx-25*ri(rnd,6,9),y:sy,a:0,band:MONO,fixed:1});
+  sp.fix.push({t:'split',x:sx,y:sy,a:45,fixed:1});
+  const ta=5*ri(rnd,8,20)*pick(rnd,[-1,1]),tb=5*ri(rnd,8,20)*pick(rnd,[-1,1]);
+  // rail A slides along x, mirror faces the beam; rail B slides along y
+  addMov(sp,{t:'mirror',x:sx+La,y:sy,a:90,rail:0,range:150,norot:1},{startPos:[sx+La-ta,sy]});
+  addMov(sp,{t:'mirror',x:sx,y:sy+Lb,a:0,rail:90,range:150,norot:1},{startPos:[sx,sy+Lb-tb]});
+  sp.mov[0].p.x=sx+La;sp.mov[1].p.y=sy+Lb;
+  makeGoal(sp,{t:'goal',x:sx,y:sy-Lc,band:MONO,coh:1,r:15,need:0.8,show:1,fixed:1},[15]);
+  sp.fixedNeed=true;
+  if(c>=2&&rnd()<0.8){
+    // a fixed phase plate in one arm, a movable one in the other
+    const k=pick(rnd,[0,1]);
+    if(k===0)sp.fix.push({t:'phase',x:sx+La/2,y:sy,a:0,ax:pick(rnd,DIALV.phase.slice(1)),fixed:1});
+    else sp.fix.push({t:'phase',x:sx,y:sy+Lb/2,a:0,ax:pick(rnd,DIALV.phase.slice(1)),fixed:1});
+  }
+  // rails: starts/solutions. find a solution by scanning rail positions
+  const m0=sp.mov[0],m1=sp.mov[1];
+  const base0={x:m0.p.x,y:m0.p.y,a:m0.p.a},base1={x:m1.p.x,y:m1.p.y,a:m1.p.a};
+  const found=[];
+  for(let t0=-100;t0<=100;t0+=25)for(let t1=-150;t1<=150&&found.length<8;t1+=5){
+    const st=[{x:base0.x+t0,y:base0.y,a:base0.a},{x:base1.x,y:base1.y+t1,a:base1.a}];
+    if(allLit(evalRaw(assemble(sp,st)).res))found.push([t0,t1]);
+  }
+  if(!found.length)return null;
+  const [t0,t1]=pick(rnd,found);
+  m0.p.x=base0.x+t0;m1.p.y=base1.y+t1;
+  // rail origin is the start position; keep the solution within reach of it
+  m0.startPos=[m0.p.x-ta,sy];m1.startPos=[sx,m1.p.y-tb];
+  const fx=rnd()<0.5,fy=rnd()<0.5;
+  if(fx||fy)flipSpec(sp,fx,fy);
+  return {sp,meta:{name:pickName(rnd,'mich'),hint:HINT.mich,coh:1}};
+}
+
+
+function famGlass(rnd,c,kind){
+  const sp=newSpec();
+  const ex=5*ri(rnd,14,24),ey=5*ri(rnd,30,90),d0=pick(rnd,[-20,-10,0,10,20]);
+  const d=dv(d0),D=5*ri(rnd,35,65),off=5*ri(rnd,-8,8);
+  const orb=kind==='orb',gr=orb?5*ri(rnd,8,12):60;
+  const offs=orb?(rnd()<0.5?-1:1)*5*Math.round(rr(rnd,0.45,0.9)*gr/5):off;
+  const px=ex+d[0]*D-d[1]*offs,py=ey+d[1]*D+d[0]*offs;
+  if(!inB(px,py,80))return null;
+  const prism=orb?{t:'orb',x:px,y:py,a:0,r:gr,norot:1}:{t:'prism',x:px,y:py,a:5*ri(rnd,0,23),r:60};
+  const em={t:'emit',x:ex,y:ey,a:d0,band:WHITE,fixed:1};
+  const pr=clone(prism);
+  const t0=evalRaw([em,pr]);
+  const lastSeg=i=>{const r=t0.rays.filter(q=>q.i===i);return r.length>=3?r[r.length-1]:null};
+  const lo=lastSeg(3),hi=lastSeg(36);
+  if(!lo||!hi)return null;
+  const ang=q=>Math.atan2(q.y2-q.y1,q.x2-q.x1)/R;
+  if(Math.abs(m180(ang(lo)-ang(hi)))<4)return null;
+  const iw=ri(rnd,8,32),seg=lastSeg(iw);if(!seg)return null;
+  let sx=seg.x1,sy=seg.y1,dir=ang(seg);
+  const nm=c<=2?ri(rnd,0,1):(c<5?ri(rnd,1,2):2);
+  sp.emit.push(em);addMov(sp,prism);
+  if(orb)sp.allowFail=2;
+  const pts=[[px,py,80],[ex,ey,70]];
+  const legs=[{x1:ex,y1:ey,x2:px,y2:py}];
+  for(let k=0;k<nm;k++){
+    const L=rr(rnd,130,260),dd=dv(dir),qx=sx+dd[0]*L,qy=sy+dd[1]*L;
+    if(!inB(qx,qy,60))return null;
+    const t=pick(rnd,TURNS),a=turnMirror(dir,dir+t),u=dv(a);
+    const dot=dd[0]*u[0]+dd[1]*u[1],rx=2*dot*u[0]-dd[0],ry=2*dot*u[1]-dd[1];
+    addMov(sp,{t:'mirror',x:qx,y:qy,a});
+    legs.push({x1:sx,y1:sy,x2:qx,y2:qy});pts.push([qx,qy,90]);
+    sx=qx;sy=qy;dir=Math.atan2(ry,rx)/R;
+  }
+  const dd=dv(dir),Lg=rr(rnd,170,300),gx=sx+dd[0]*Lg,gy=sy+dd[1]*Lg;
+  if(!inB(gx,gy,45))return null;
+  for(const q of pts)if(Math.hypot(q[0]-gx,q[1]-gy)<90)return null;
+  legs.push({x1:sx,y1:sy,x2:gx,y2:gy});
+  const g={t:'goal',x:gx,y:gy,band:WHITE,r:12,ex:1,show:0,fixed:1};
+  makeGoal(sp,g,[10,12,14,17,20,24]);
+  sp.hook=()=>{
+    const gp=sp.goals[0].p;gp.band=WHITE;gp.need=0.03;delete gp.ex;
+    const tr=evalRaw(assemble(sp));
+    const arr=new Set();
+    for(const q of tr.rays)if(Math.hypot(q.x2-gp.x,q.y2-gp.y)<=gp.r+0.5)arr.add(q.i);
+    if(arr.size<4||arr.size>16)return false;
+    const a=[...arr];const lo2=Math.min(...a),hi2=Math.max(...a);
+    gp.band=[Math.max(400,WL[lo2]-1),Math.min(700,WL[hi2]+1)];gp.ex=1;
+    return true;
+  };
+  const keep={legs,pts:pts.map(q=>[q[0],q[1],q[2]]),walls:[]};
+  addWalls(rnd,sp,keep,c<3?1:2,[ex,ey,gx,gy],20);
+  return {sp,meta:{name:pickName(rnd,orb?'orb':'prism'),hint:orb?HINT.orb:HINT.prism}};
+}
+
+const FAMS={zoom:(r,c)=>famFocus(r,c,true),spread:famSpread,prism:(r,c)=>famGlass(r,c,'prism'),orb:(r,c)=>famGlass(r,c,'orb'),relay:famRelay,fan:famFan,sorter:famSorter,combine:famCombine,focus:famFocus,pinhole:famPinhole,polchain:famPolChain,polsplit:famPolSplit,mz:famMZ,mich:famMich};
+const MIN_TIER={zoom:1,spread:1,prism:1,orb:1,relay:1,fan:1,sorter:1,combine:2,focus:1,pinhole:2,polchain:1,polsplit:1,mz:1,mich:2};
+function familiesFor(c){return Object.keys(FAMS).filter(k=>MIN_TIER[k]<=c)}
+
+// ---------- public
+// make(seed,tier,family?) -> level or null. Tier 1..5.
+function make(seed,tier,family,maxTries){
+  const rnd=mulberry(seed*7919+tier*104729);
+  const fams=family?[family]:familiesFor(tier);
+  for(let t=0;t<(maxTries||160);t++){
+    const f=family||pick(rnd,fams);
+    let r=null;
+    try{r=FAMS[f](rnd,tier)}catch(e){r=null}
+    if(!r)continue;
+    // interferometers and rails carry their own state
+    r.sp.meta=Object.assign({},r.sp.meta,r.meta);
+    const lv=finish(rnd,r.sp,{name:r.meta.name,hint:r.meta.hint,pol:r.sp.meta.pol||r.meta.pol,coh:r.sp.coh||r.meta.coh});
+    if(lv){lv.family=f;return lv}
+  }
+  return null;
+}
+return {make,FAMS,familiesFor,mulberry};
+}
+
 (function(){
+LEVELS.push(...GEN_LEVELS);
+const GEN=makeGen({normalize,trace,WL,W,H,ZF});
+const CH0=[];{let s0=0;CHAPTERS.forEach(c=>{CH0.push(s0);s0+=c.n||5})}
+function chapterOf(n){let c=0;while(c+1<CH0.length&&n>=CH0[c+1])c++;return c}
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 const $=id=>document.getElementById(id);
 let sc=1,ox=0,oy=0,dpr=1,cw=0,ch=0;
@@ -489,18 +1462,115 @@ let done=[];const introSeen={};
 try{done=JSON.parse(localStorage.getItem('refract-done')||'[]')}catch(e){done=[]}
 function saveDone(){try{localStorage.setItem('refract-done',JSON.stringify(done))}catch(e){}}
 const RGB=WL.map(wlRGB).map(c=>c.map(v=>Math.min(255,Math.round(v*0.88+28))));
-function load(n){
-  cur=n;hinted=[];solved=false;litSince=0;sel=null;
-  pieces=JSON.parse(JSON.stringify(LEVELS[n].pieces)).map(normalize);
-  $('title').innerHTML=(n+1)+'. '+LEVELS[n].name+'<small>'+LEVELS[n].hint+'</small>';
+let LV=LEVELS[0],endless=null,etier=1,ecount=0;
+try{const e=JSON.parse(localStorage.getItem('refract-endless')||'{}');etier=e.tier||1;ecount=e.n||0}catch(e){}
+function saveEndless(){try{localStorage.setItem('refract-endless',JSON.stringify({tier:etier,n:ecount}))}catch(e){}}
+function begin(lv){
+  LV=lv;sandbox=!!lv.sandbox;hinted=[];solved=false;litSince=0;sel=null;
+  pieces=JSON.parse(JSON.stringify(lv.pieces)).map(normalize);
+  $('sbx').classList.toggle('on',sandbox);$('bHint').style.display=sandbox?'none':'';
+  sbxBar();resize();
+  $('title').innerHTML=(sandbox?'':endless?'\u221e ':(cur+1)+'. ')+lv.name+'<small>'+lv.hint+(endless?' \u00b7 seed '+endless.seed:'')+'</small>';
   $('over').classList.remove('on');updateCtl();dirty=true;
-  const c=Math.floor(n/5);
-  if(n%5===0&&c>0&&!done.includes(n)&&!introSeen[c]){
+}
+function load(n){
+  cur=n;endless=null;begin(LEVELS[n]);
+  const c=chapterOf(n);
+  if(n===CH0[c]&&c>0&&!done.includes(n)&&!introSeen[c]){
     introSeen[c]=1;
     card('<h2>Chapter '+(c+1)+': '+CHAPTERS[c].name+'</h2><p>'+CHAPTERS[c].intro+'</p><div class="row"><button class="pri" id="iOk">Got it</button></div>');
     $('iOk').onclick=()=>$('over').classList.remove('on');
   }
 }
+function loadEndless(tier,seed){
+  etier=tier;saveEndless();
+  card('<h2>Making a puzzle</h2><p>One moment.</p>');
+  setTimeout(()=>{
+    let lv=null,sd=seed;
+    for(let k=0;k<30&&!lv;k++,sd++)lv=GEN.make(sd,tier);
+    if(!lv){card('<h2>No luck</h2><p>The generator came up empty. Try again.</p><div class="row"><button class="pri" id="eAgain">Try again</button></div>');$('eAgain').onclick=()=>loadEndless(tier,Math.floor(Math.random()*1e6)+1);return}
+    cur=-1;endless={tier,seed:sd-1};begin(lv);
+  },30);
+}
+function restart(){if(sandbox)sbxStart(true);else if(endless)begin(LV);else load(cur)}
+// ---- sandbox: every piece, no goal required
+const RED_=[620,700],GRN_=[520,570],BLU_=[420,480];
+const BANDS={
+  emit:[[400,700],RED_,GRN_,BLU_,[595,605],[400,490],[560,700]],
+  filter:[RED_,GRN_,BLU_,[400,490],[560,700],[400,610]],
+  dichro:[[610,700],[400,490],[495,608],[400,610],[495,700]],
+  goal:[[400,700],RED_,GRN_,BLU_,[595,605]]
+};
+const BNAME=b=>b[0]<=400&&b[1]>=700?'White':b[0]===595?'Laser':b[1]>=700&&b[0]>=600?'Red':b[0]>=500&&b[1]<=600&&b[0]<560?'Green':b[1]<=500?'Blue':'Mix';
+const MK={
+  emit:()=>({t:'emit',a:0,band:[400,700]}),
+  mirror:()=>({t:'mirror',a:45}),
+  split:()=>({t:'split',a:45}),
+  prism:()=>({t:'prism',a:0}),
+  orb:()=>({t:'orb'}),
+  lens:()=>({t:'lens',a:90,f:160}),
+  concave:()=>({t:'lens',a:90,f:-100}),
+  zlens:()=>({t:'zlens',a:90}),
+  filter:()=>({t:'filter',a:90,band:RED_}),
+  dichro:()=>({t:'dichro',a:45,band:[610,700]}),
+  pol:()=>({t:'pol',ax:0}),
+  hwp:()=>({t:'hwp',ax:0}),
+  pbs:()=>({t:'pbs',a:45,ax:0}),
+  phase:()=>({t:'phase',ax:0}),
+  wall:()=>({t:'wall',w:30,h:160,a:0}),
+  goal:()=>({t:'goal',band:[400,700],r:15,show:1})
+};
+const PAL=[['emit','Light'],['mirror','Mirror'],['split','Splitter'],['prism','Prism'],['orb','Glass ball'],['lens','Convex lens'],['concave','Concave lens'],['zlens','Zoom lens'],['filter','Filter'],['dichro','Dichroic'],['pol','Polarizer'],['hwp','Waveplate'],['pbs','Pol. splitter'],['phase','Phase plate'],['wall','Wall'],['goal','Target']];
+const FLIST=[-200,-120,-80,80,120,160,240,320];
+let sandbox=false;
+function sbxSave(){
+  try{
+    const list=pieces.map(p=>{const q=JSON.parse(JSON.stringify(p));q.a=p.a/D2R;delete q.kd;return q});
+    localStorage.setItem('refract-sandbox',JSON.stringify(list));
+  }catch(e){}
+}
+function sbxStart(fresh){
+  let list=null;
+  if(!fresh)try{list=JSON.parse(localStorage.getItem('refract-sandbox'))}catch(e){}
+  if(!Array.isArray(list)||!list.length)list=[{t:'emit',x:110,y:300,a:0,band:[400,700]},{t:'prism',x:420,y:300,a:0}];
+  cur=-1;endless=null;
+  begin({name:'Sandbox',hint:'Add any piece from the bar. Drag to move, turn with the blue dot, and use Delete to remove.',pieces:list,sol:{},pol:1,coh:1,sandbox:1});
+}
+function sbxBar(){
+  const bar=$('sbx');
+  if(sandbox){LV.pol=pieces.some(p=>p.t==='pol'||p.t==='hwp'||p.t==='pbs'||(p.t==='emit'&&p.pol))?1:0;LV.coh=pieces.some(p=>p.t==='phase'||(p.t==='emit'&&p.band[0]===595))?1:0;dirty=true}
+  if(!sandbox){bar.innerHTML='';return}
+  let h='';
+  for(const [k,n] of PAL)h+='<button data-add="'+k+'">'+n+'</button>';
+  h+='<span class="sep"></span>';
+  if(sel){
+    h+='<button class="del" data-act="del">Delete</button>';
+    if(BANDS[sel.t])h+='<button data-act="band">Color: '+BNAME(sel.band)+'</button>';
+    if(sel.t==='emit'){
+      h+='<button data-act="wide">Beam: '+(sel.w?'wide':'narrow')+'</button>';
+      h+='<button data-act="pol">Polarization '+fmt(sel.pol||0)+'</button>';
+    }
+    if(sel.t==='lens')h+='<button data-act="focal">Focal length '+fmtF(sel.f)+'</button>';
+  }
+  h+='<button data-act="clear">Clear all</button>';
+  bar.innerHTML=h;
+  bar.querySelectorAll('button').forEach(b=>b.onclick=()=>sbxDo(b.dataset.add,b.dataset.act));
+}
+function sbxDo(add,act){
+  if(add){
+    const spots=[[500,300],[500,180],[500,420],[360,300],[640,300],[360,180],[640,420],[300,470],[700,150],[200,200],[800,300]];
+    const pt=spots.find(s=>!pieces.some(p=>Math.hypot(p.x-s[0],p.y-s[1])<70))||[500,300];
+    const q=MK[add]();q.x=pt[0];q.y=pt[1];
+    const p=normalize(q);pieces.push(p);sel=p;
+  }else if(act==='del'&&sel){pieces.splice(pieces.indexOf(sel),1);sel=null}
+  else if(act==='clear'){pieces=[];sel=null}
+  else if(sel&&act==='band'){const L=BANDS[sel.t],i=L.findIndex(b=>b[0]===sel.band[0]&&b[1]===sel.band[1]);sel.band=L[(i+1)%L.length]}
+  else if(sel&&act==='wide'){if(sel.w){sel.w=0;sel.nb=1}else{sel.w=60;sel.nb=9}}
+  else if(sel&&act==='pol'){sel.pol=((sel.pol||0)+22.5)%180}
+  else if(sel&&act==='focal'){const i=FLIST.indexOf(sel.f);sel.f=FLIST[(i+1)%FLIST.length]}
+  updateCtl();dirty=true;sbxSave();sbxBar();
+}
+
 function resize(){
   const r=cv.parentElement.getBoundingClientRect();
   dpr=Math.min(window.devicePixelRatio||1,2);
@@ -510,8 +1580,8 @@ function resize(){
 }
 window.addEventListener('resize',resize);
 function toW(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left-ox)/sc,y:(e.clientY-r.top-oy)/sc}}
-function radius(p){return p.r!==undefined?p.r:p.len/2}
-function dialR(p){return p.r!==undefined?p.r:26}
+function radius(p){return p.r!==undefined?p.r:p.t==='emit'?20:p.t==='wall'?Math.max(p.w,p.h)/2:p.len/2}
+function dialR(p){return p.r!==undefined?p.r:p.t==='zlens'?46:26}
 function handlePos(p){const hr=radius(p)+28;return{x:p.x+Math.cos(p.a)*hr,y:p.y+Math.sin(p.a)*hr}}
 function dialPos(p){
   const a=(p.t==='phase'?p.ax-90:(p.kd!==undefined?p.kd:p.ax))*D2R;
@@ -524,12 +1594,16 @@ function distSeg(px,py,p){
 }
 function hit(p,w){
   if(p.fixed)return false;
+  if(p.t==='emit')return Math.hypot(w.x-p.x,w.y-p.y)<26;
+  if(p.t==='wall'){const dx=w.x-p.x,dy=w.y-p.y,c=Math.cos(p.a),s=Math.sin(p.a),u=dx*c+dy*s,v=-dx*s+dy*c;return Math.abs(u)<=p.w/2+8&&Math.abs(v)<=p.h/2+8}
   if(p.r!==undefined)return Math.hypot(w.x-p.x,w.y-p.y)<p.r*0.95;
   if(!p.len)return false;
   return distSeg(w.x,w.y,p)<(sc<0.7?26:20);
 }
 const FRAC={0:'no delay',45:'1/8 wave',90:'1/4 wave',135:'3/8 wave',180:'1/2 wave',225:'5/8 wave',270:'3/4 wave',315:'7/8 wave'};
+function fmtF(f){return Math.abs(f)>=500?'flat':(f>0?'+':'')+f}
 function dialLabel(p){
+  if(p.t==='zlens')return 'Focal length '+fmtF(zf(p));
   if(p.t==='phase')return 'Delay '+fmt(p.ax)+' ('+(FRAC[p.ax]||'')+')';
   return 'Axis '+fmt(p.ax);
 }
@@ -547,7 +1621,7 @@ cv.addEventListener('pointerdown',e=>{
   for(let i=pieces.length-1;i>=0;i--)if(hit(pieces[i],w)){f=pieces[i];break}
   sel=f;
   if(f){mode='move';off={x:w.x-f.x,y:w.y-f.y}}else mode=null;
-  updateCtl();dirty=true;
+  updateCtl();dirty=true;if(sandbox)sbxBar();
 });
 cv.addEventListener('pointermove',e=>{
   if(!sel||!mode)return;
@@ -575,14 +1649,14 @@ cv.addEventListener('pointermove',e=>{
   }
   dirty=true;
 });
-const endDrag=()=>{mode=null};
+const endDrag=()=>{if(mode&&sandbox)sbxSave();mode=null;if(sandbox)sbxBar()};
 cv.addEventListener('pointerup',endDrag);cv.addEventListener('pointercancel',endDrag);
 cv.addEventListener('wheel',e=>{if(sel&&!sel.norot){e.preventDefault();turn(e.deltaY>0?5:-5)}},{passive:false});
-function turn(d){if(!sel||sel.norot)return;sel.a+=d*D2R;dirty=true}
+function turn(d){if(!sel||sel.norot)return;sel.a+=d*D2R;dirty=true;if(sandbox)sbxSave()}
 function dial(d){
   if(!sel||!DIALS[sel.t])return;
   const D=DIALS[sel.t];sel.ax=(((sel.ax+d*D.step)%D.mod)+D.mod)%D.mod;sel.kd=sel.ax;
-  updateCtl();dirty=true;
+  updateCtl();dirty=true;if(sandbox)sbxSave();
 }
 $('rL').onclick=()=>turn(-5);$('rR').onclick=()=>turn(5);
 window.addEventListener('keydown',e=>{
@@ -591,10 +1665,11 @@ window.addEventListener('keydown',e=>{
   else if(e.key==='e'||e.key==='ArrowRight')turn(s);
   else if(e.key==='['||e.key==='ArrowDown')dial(-1);
   else if(e.key===']'||e.key==='ArrowUp')dial(1);
-  else if(e.key==='r')load(cur);
+  else if(e.key==='r')restart();
+  else if(sandbox&&sel&&(e.key==='Delete'||e.key==='Backspace')){e.preventDefault();sbxDo(null,'del')}
   else if(e.key==='Escape'){sel=null;updateCtl();dirty=true}
 });
-$('bReset').onclick=()=>load(cur);
+$('bReset').onclick=restart;
 function waveLbl(){$('bWave').textContent='Waves: '+(wavy?'on':'off')}
 $('bWave').onclick=()=>{wavy=!wavy;try{localStorage.setItem('refract-wave',wavy?'1':'0')}catch(e){}waveLbl();dirty=true};
 function guideLbl(){$('bGuide').textContent='Guides: '+(guides?'on':'off')}
@@ -602,12 +1677,12 @@ $('bGuide').onclick=()=>{guides=!guides;try{localStorage.setItem('refract-guides
 guideLbl();
 waveLbl();
 function unmatched(){
-  const sol=LEVELS[cur].sol,out=[];
+  const sol=LV.sol,out=[];
   for(const k in sol){
     const p=pieces[+k],t=sol[k];
     const m=p.t==='prism'?120:180;
     let ok=Math.hypot(p.x-t[0],p.y-t[1])<=10;
-    if(ok&&!DISC[p.t]){const d=((p.a/D2R-t[2])%m+m+m/2)%m-m/2;ok=Math.abs(d)<=6}
+    if(ok&&!DISC[p.t]&&!p.norot){const d=((p.a/D2R-t[2])%m+m+m/2)%m-m/2;ok=Math.abs(d)<=6}
     if(ok&&t.length>3)ok=Math.abs(p.ax-t[3])<1;
     if(!ok)out.push({k:+k,p,t});
   }
@@ -625,8 +1700,8 @@ function arcBetween(x,y,r,a,b){
 }
 function drawGuides(){
   ctx.lineCap='round';
-  for(const p of pieces)if(p.t==='lens'){
-    const nx=-Math.sin(p.a),ny=Math.cos(p.a),f=Math.abs(p.f);
+  for(const p of pieces)if((p.t==='lens'||p.t==='zlens')&&Math.abs(p.t==='zlens'?zf(p):p.f)<500){
+    const nx=-Math.sin(p.a),ny=Math.cos(p.a),f=Math.abs(p.t==='zlens'?zf(p):p.f);
     ctx.font='600 11px system-ui,sans-serif';ctx.textAlign='center';
     for(const sgn of [-1,1]){
       const x=p.x+nx*f*sgn,y=p.y+ny*f*sgn;
@@ -668,20 +1743,32 @@ function menu(){
   let g='<h2>Refract</h2><p>Steer light into every target. Each chapter adds a new kind of optics.</p>';
   CHAPTERS.forEach((c,ci)=>{
     g+='<h3>Chapter '+(ci+1)+': '+c.name+'</h3><div class="grid">';
-    for(let i=ci*5;i<ci*5+5;i++)g+='<button data-i="'+i+'" class="'+(done.includes(i)?'done':'')+'"><b>'+(i+1)+'</b><span>'+LEVELS[i].name+'</span></button>';
+    for(let i=CH0[ci];i<CH0[ci]+(c.n||5);i++)g+='<button data-i="'+i+'" class="'+(done.includes(i)?'done':'')+'"><b>'+(i+1)+'</b><span>'+LEVELS[i].name+'</span></button>';
     g+='</div>';
   });
-  g+='<div class="row"><button id="mClose" class="pri">Close</button></div>';
+  g+='<h3>Sandbox</h3><p>Every piece, no goals. Build anything and watch the light.</p><div class="row"><button id="mSbx">Open sandbox</button></div>';
+  g+='<h3>Endless</h3><p>New puzzles, made on the spot. Pick a difficulty.'+(ecount?' Solved so far: '+ecount+'.':'')+'</p><div class="grid">';
+  CHAPTERS.slice(5).forEach((c,k)=>{g+='<button data-t="'+(k+1)+'"><b>'+(k+1)+'</b><span>'+c.name+'</span></button>'});
+  g+='</div><div class="row"><button id="mClose" class="pri">Close</button></div>';
   card(g);
-  document.querySelectorAll('.grid button').forEach(b=>b.onclick=()=>load(+b.dataset.i));
+  document.querySelectorAll('.grid button[data-i]').forEach(b=>b.onclick=()=>load(+b.dataset.i));
+  document.querySelectorAll('.grid button[data-t]').forEach(b=>b.onclick=()=>loadEndless(+b.dataset.t,Math.floor(Math.random()*1e6)+1));
+  $('mSbx').onclick=()=>sbxStart(false);
   $('mClose').onclick=()=>$('over').classList.remove('on');
 }
 $('bMenu').onclick=menu;
 function win(){
   solved=true;
+  if(endless){
+    ecount++;saveEndless();
+    card('<h2>Solved</h2><p>Every target is lit. Puzzles solved: '+ecount+'.</p><div class="row"><button id="wRe">Replay</button><button id="wMenu">Levels</button><button id="wNext" class="pri">Next puzzle</button></div>');
+    $('wRe').onclick=()=>restart();$('wMenu').onclick=menu;
+    $('wNext').onclick=()=>loadEndless(endless.tier,Math.floor(Math.random()*1e6)+1);
+    return;
+  }
   if(!done.includes(cur)){done.push(cur);saveDone()}
   const last=cur===LEVELS.length-1;
-  card('<h2>Solved</h2><p>'+(last?'That was the last level. Replay any from the menu.':'Every target is lit.')+'</p><div class="row"><button id="wRe">Replay</button>'+(last?'<button id="wMenu" class="pri">Levels</button>':'<button id="wNext" class="pri">Next level</button>')+'</div>');
+  card('<h2>Solved</h2><p>'+(last?'That was the last level. Replay any from the menu, or try Endless.':'Every target is lit.')+'</p><div class="row"><button id="wRe">Replay</button>'+(last?'<button id="wMenu" class="pri">Levels</button>':'<button id="wNext" class="pri">Next level</button>')+'</div>');
   $('wRe').onclick=()=>load(cur);
   if(last)$('wMenu').onclick=menu;else $('wNext').onclick=()=>load(cur+1);
 }
@@ -705,9 +1792,9 @@ function phaseBadge(x,y,deg,col){
 function polyPath(sg){ctx.beginPath();ctx.moveTo(sg[0].x1,sg[0].y1);sg.forEach(s=>ctx.lineTo(s.x2,s.y2));ctx.closePath()}
 function drawLens(p){
   ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.a);
-  const h=p.len/2;ctx.beginPath();
-  if(p.f>0){ctx.moveTo(-h,0);ctx.quadraticCurveTo(0,-17,h,0);ctx.quadraticCurveTo(0,17,-h,0)}
-  else{ctx.moveTo(-h,-10);ctx.quadraticCurveTo(0,-2,h,-10);ctx.lineTo(h,10);ctx.quadraticCurveTo(0,2,-h,10);ctx.closePath()}
+  const h=p.len/2,f=p.t==='zlens'?zf(p):p.f,str=Math.min(1,110/Math.abs(f)),bu=3+14*str;ctx.beginPath();
+  if(f>0){ctx.moveTo(-h,0);ctx.quadraticCurveTo(0,-bu,h,0);ctx.quadraticCurveTo(0,bu,-h,0)}
+  else{const t=10,c=t-8*str;ctx.moveTo(-h,-t);ctx.quadraticCurveTo(0,-c,h,-t);ctx.lineTo(h,t);ctx.quadraticCurveTo(0,c,-h,t);ctx.closePath()}
   ctx.fillStyle='rgba(150,200,255,0.2)';ctx.fill();
   ctx.strokeStyle='rgba(215,232,255,0.95)';ctx.lineWidth=2.5;ctx.lineJoin='round';ctx.stroke();
   ctx.restore();
@@ -739,9 +1826,10 @@ function bolt(x,y){
   ctx.lineWidth=1.2;line(x-2.2,y-2.2,x+2.2,y+2.2);
 }
 function marks(p){
-  if(p.t==='wall'||p.t==='emit'||p.t==='goal')return;
+  if(p.fixed&&(p.t==='wall'||p.t==='emit'||p.t==='goal'))return;
   if(p.fixed){
     if(p.t==='prism'){segsOf(p).forEach(s=>bolt(s.x1,s.y1))}
+    else if(p.t==='orb'){for(let k=0;k<4;k++){const a=Math.PI/4+k*Math.PI/2;bolt(p.x+Math.cos(a)*p.r,p.y+Math.sin(a)*p.r)}}
     else if(DISC[p.t]){for(let k=0;k<4;k++){const a=Math.PI/4+k*Math.PI/2;bolt(p.x+Math.cos(a)*p.r,p.y+Math.sin(a)*p.r)}}
     else if(p.len){const s=segsOf(p)[0];bolt(s.x1,s.y1);bolt(s.x2,s.y2)}
   }else{
@@ -751,10 +1839,10 @@ function marks(p){
   }
 }
 function drawPiece(p){
-  if(p.t==='prism'){
+  if(p.t==='prism'||p.t==='orb'){
     polyPath(segsOf(p));ctx.strokeStyle='rgba(205,228,255,0.85)';ctx.lineWidth=2.5;ctx.lineJoin='round';ctx.stroke();return;
   }
-  if(p.t==='lens'){drawLens(p);return}
+  if(p.t==='lens'||p.t==='zlens'){drawLens(p);return}
   if(!p.len&&p.t!=='emit'&&!DISC[p.t])return;
   const s=p.len?segsOf(p)[0]:null;
   ctx.lineCap='round';
@@ -783,7 +1871,7 @@ function drawPiece(p){
     ctx.beginPath();ctx.rect(-14,-12,26,24);ctx.fill();ctx.stroke();
     ctx.fillStyle=bandColor(p.band,1);ctx.beginPath();ctx.moveTo(12,-6);ctx.lineTo(20,0);ctx.lineTo(12,6);ctx.fill();
     ctx.restore();
-    if(LEVELS[cur].pol)badge(p.x,p.y-26,p.pol,'#ffffff',9);
+    if(LV.pol)badge(p.x,p.y-26,p.pol,'#ffffff',9);
   }
 }
 function draw(time){
@@ -802,10 +1890,10 @@ function draw(time){
   for(const p of pieces)if(p.t==='wall'){
     polyPath(segsOf(p));ctx.fillStyle='#1a1f2e';ctx.fill();ctx.strokeStyle='#3a4360';ctx.lineWidth=2;ctx.stroke();
   }
-  for(const p of pieces)if(p.t==='prism'){polyPath(segsOf(p));ctx.fillStyle='rgba(150,200,255,0.10)';ctx.fill()}
+  for(const p of pieces)if(p.t==='prism'||p.t==='orb'){polyPath(segsOf(p));ctx.fillStyle='rgba(150,200,255,0.10)';ctx.fill()}
   if(lastTrace){
     ctx.globalCompositeOperation='lighter';ctx.lineCap='round';
-    const step=Math.max(6,(lastTrace.totalLen||0)/5000),coh=!!LEVELS[cur].coh;
+    const step=Math.max(6,(lastTrace.totalLen||0)/5000),coh=!!LV.coh;
     for(const pass of [0,1]){
       for(const r of lastTrace.rays){
         const c=RGB[r.i],a=Math.min(1,r.I*r.K);
@@ -851,7 +1939,7 @@ function draw(time){
   }
   if(guides)drawGuides();
   drawHints();
-  if(lastTrace&&LEVELS[cur].pol){
+  if(lastTrace&&LV.pol){
     for(const r of lastTrace.rays){
       if(r.i!==lastTrace.minI||r.I<0.04)continue;
       const L=Math.hypot(r.x2-r.x1,r.y2-r.y1);
@@ -906,13 +1994,21 @@ function frame(t){
     if(all){if(!litSince)litSince=t}else litSince=0;
   }
   if(redraw||wavy)draw(t/1000);
-  if(!solved&&litSince&&t-litSince>500)win();
+  if(!solved&&!sandbox&&litSince&&t-litSince>500)win();
   requestAnimationFrame(frame);
 }
 resize();
 let start=0;
 if(done.length){start=Math.min(LEVELS.length-1,Math.max(...done)+1)}
-load(start);
+const qp=new URLSearchParams(location.search);
+if(qp.get('sandbox'))sbxStart(false);
+else if(qp.get('gen')){
+  const [gf,gt,gs]=qp.get('gen').split(':'),lv=GEN.make(+gs||1,+gt||1,gf||undefined);
+  if(lv){cur=-1;endless={tier:+gt||1,seed:+gs||1};begin(lv)}else load(start);
+}else{
+  if(qp.get('level'))start=Math.max(0,Math.min(LEVELS.length-1,+qp.get('level')-1));
+  load(start);
+}
 requestAnimationFrame(frame);
 })();
 </script>

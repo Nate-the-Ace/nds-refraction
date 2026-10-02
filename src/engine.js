@@ -11,15 +11,19 @@ function wlRGB(wl){
   return [c(r),c(g),c(b)];
 }
 const DISC={pol:1,hwp:1,phase:1};
-const DIALS={pol:{step:22.5,mod:180,name:'Axis'},hwp:{step:22.5,mod:180,name:'Axis'},pbs:{step:22.5,mod:180,name:'Axis'},phase:{step:45,mod:360,name:'Phase'}};
+const ZF=[-60,-80,-100,-130,-170,-230,-340,-600,600,340,230,170,130,100,80,60];
+const zf=p=>ZF[(Math.round(p.ax/22.5)%16+16)%16];
+const DIALS={zlens:{step:22.5,mod:360,name:'Focal'},pol:{step:22.5,mod:180,name:'Axis'},hwp:{step:22.5,mod:180,name:'Axis'},pbs:{step:22.5,mod:180,name:'Axis'},phase:{step:45,mod:360,name:'Phase'}};
 function normalize(p){
   p.a=(p.a||0)*D2R;
-  const L={mirror:100,split:100,filter:80,lens:110,pbs:90,dichro:100};
+  const L={mirror:100,split:100,filter:80,lens:110,zlens:110,pbs:90,dichro:100};
   if(L[p.t])p.len=p.len||L[p.t];
   if(p.t==='prism')p.r=p.r||60;
+  if(p.t==='orb'){p.r=p.r||50;p.norot=1}
   if(DISC[p.t]){p.r=p.r||30;p.norot=1}
   if(p.t==='goal')p.r=p.r||15;
   if(p.t==='lens'&&p.f===undefined)p.f=160;
+  if(p.t==='zlens'&&p.ax===undefined)p.ax=247.5;
   if(DIALS[p.t]&&p.ax===undefined)p.ax=0;
   if(p.t==='emit'||p.t==='filter'||p.t==='goal'||p.t==='dichro')p.band=p.band||[400,700];
   if(p.t==='emit'){p.pol=(p.pol||0);p.nb=p.w?(p.nb||9):1;p.w=p.w||0}
@@ -35,6 +39,10 @@ function segsOf(p){
   if(p.t==='prism'){
     const v=[0,1,2].map(k=>{const q=p.a+k*2*Math.PI/3;return [p.x+Math.cos(q)*p.r,p.y+Math.sin(q)*p.r]});
     return [0,1,2].map(k=>({x1:v[k][0],y1:v[k][1],x2:v[(k+1)%3][0],y2:v[(k+1)%3][1],k:'glass',p}));
+  }
+  if(p.t==='orb'){
+    const n=36,v=[];for(let k=0;k<n;k++){const q=k*2*Math.PI/n;v.push([p.x+Math.cos(q)*p.r,p.y+Math.sin(q)*p.r])}
+    return v.map((a,k)=>({x1:a[0],y1:a[1],x2:v[(k+1)%n][0],y2:v[(k+1)%n][1],k:'glass',p}));
   }
   if(p.t==='wall'){
     const hw=p.w/2,hh=p.h/2;
@@ -128,11 +136,11 @@ function trace(pieces){
       if(1-T>0.005)stack.push(mk(base,{dx:rx,dy:ry,I:r.I*(1-T),pol:p.ax*D2R+Math.PI/2}));
       continue;
     }
-    if(k==='lens'){
+    if(k==='lens'||k==='zlens'){
       const fx=-nx,fy=-ny;
       const dd=r.dx*fx+r.dy*fy,dt=r.dx*ex+r.dy*ey;
       const slope=dt/dd,h=(hx-p.x)*ex+(hy-p.y)*ey;
-      const s2=slope-h/p.f;
+      const s2=slope-h/(k==='zlens'?zf(p):p.f);
       let ux=fx+s2*ex,uy=fy+s2*ey;const ul=Math.hypot(ux,uy);ux/=ul;uy/=ul;
       stack.push(mk(base,{dx:ux,dy:uy}));continue;
     }
@@ -169,4 +177,4 @@ function evalGoal(g,s){
   const prog=inN?hit/inN:0;
   return {prog,pct,lit:prog>=0.7&&(!g.ex||outside<=2),bad:!!g.ex&&outside>2};
 }
-if(typeof module!=='undefined')module.exports={W,H,NW,WL,ior,wlRGB,normalize,trace,segsOf,DIALS,DISC};
+if(typeof module!=='undefined')module.exports={W,H,NW,WL,ior,wlRGB,normalize,trace,segsOf,DIALS,DISC,ZF,zf};

@@ -19,7 +19,7 @@ Enable GitHub Pages on the `main` branch (root) and the game is served at
 
 ## Levels
 
-25 levels in 5 chapters. Each chapter adds one new kind of optics.
+25 hand-built levels in 5 chapters, each adding one kind of optics. Then 100 more in five mixed chapters that use everything together.
 
 | Chapter | New item | Levels |
 |---|---|---|
@@ -28,6 +28,17 @@ Enable GitHub Pages on the `main` branch (root) and the game is served at
 | 3. Polarization | Polarizer, waveplate, polarizing splitter | 11 to 15 |
 | 4. Dichroics | Color-selective mirror | 16 to 20 |
 | 5. Interference | Phase plates, mirrors on rails | 21 to 25 |
+| 6 to 10. Workshop, Studio, Laboratory, Observatory, Grand Optics | Glass ball, zoom lens, everything mixed | 26 to 125 |
+
+Pieces added after the first 25 levels:
+
+- **Glass ball**: a round prism. Where the beam strikes it sets the angle and the color. It has nothing to turn.
+- **Zoom lens**: a variable lens. Select it and drag the amber knob to squeeze it from a strong concave lens, through flat, to a strong convex lens (16 settings).
+- Fixed lenses come in many focal lengths, convex and concave.
+
+**Endless** (menu): the game builds a new puzzle on the spot at one of five difficulties. The seed is shown in the title.
+
+**Sandbox** (menu): every piece, no goals. Add pieces from the bar, change colors, beam width, polarization and focal length, delete or clear. The layout is saved in the browser.
 
 Progress is saved in the browser's local storage.
 
@@ -46,19 +57,30 @@ Progress is saved in the browser's local storage.
 Source lives in `src/`:
 
 - `src/engine.js`: the light tracer (also runs in Node)
-- `src/levels.js`: chapters and levels, each with a known solution
+- `src/levels.js`: chapters and the 25 hand-built levels, each with a known solution
+- `src/levels_gen.js`: the 100 baked generated levels (written by `tools/gen_levels.js`, do not edit)
+- `src/gen.js`: the level generator behind the baked levels and Endless mode
 - `src/template.html`: UI, rendering and input
 
 ```
-python3 build.py        # writes index.html
-node test/verify.js     # every level must have a working solution
+python3 build.py             # writes index.html
+node test/verify.js          # every level must have a working solution
+node tools/gen_levels.js     # re-bake the 100 generated levels
+node tools/check.js 20       # re-verify freshly generated levels
+node tools/probe.js orb 1,3  # generator success rate per family and tier
 ```
 
 `index.html` is committed so the repo works on GitHub Pages with no build step. Rebuild it after editing anything in `src/`.
 
-### Adding a level
+### How levels are generated
 
-Add an entry to `LEVELS` in `src/levels.js` with `name`, `hint`, `pieces` and `sol`. `sol` maps a piece index to `[x, y, angleDegrees]` (plus a fourth value for the dial on polarizers and phase plates). Run `node test/verify.js` to confirm it solves.
+The generator builds each level backwards from a solution. It lays out a beam path (or a tree of paths), places the pieces that solve it, places walls and decoys, then scrambles the movable pieces. It then checks the result with the real engine: the solution lights every target, the start does not, every moved piece matters, and the solution survives a 5 px nudge of any single piece. Target sizes and thresholds are tuned from the simulation. The same seed always gives the same level.
+
+Families: relay, fan, sorter, combine, focus, zoom, spread, pinhole, prism, glass ball, polarizer chain, polarizing splitter, Mach-Zehnder and Michelson interferometers.
+
+### Adding a level by hand
+
+Add an entry to `LEVELS` in `src/levels.js` with `name`, `hint`, `pieces` and `sol`. `sol` maps a piece index to `[x, y, angleDegrees]` (plus a fourth value for the dial on polarizers, phase plates and zoom lenses). Run `node test/verify.js` to confirm it solves.
 
 ## Credit
 
