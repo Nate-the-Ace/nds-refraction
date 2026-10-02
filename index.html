@@ -37,6 +37,8 @@ footer{justify-content:center;min-height:58px;flex-wrap:wrap}
 .item i{position:absolute;top:3px;right:5px;font-style:normal;font-size:11px;color:var(--acc);pointer-events:none}
 .item.out{opacity:.35;cursor:default}
 #ghost{position:fixed;z-index:20;pointer-events:none;opacity:.85;display:none}
+#selbar{position:absolute;left:8px;right:8px;bottom:8px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;pointer-events:none;z-index:4}
+#selbar .grp{pointer-events:auto;background:rgba(18,21,31,.94);border:1px solid var(--line);border-radius:12px;padding:4px 6px;flex-wrap:wrap;justify-content:center}
 #selact button{padding:7px 11px;font-size:13px;min-height:36px}
 #selact .del{border-color:#7a3d3d}
 #over{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(6,8,12,.74);z-index:5;padding:12px}
@@ -61,6 +63,7 @@ footer{justify-content:center;min-height:58px;flex-wrap:wrap}
   <button id="bReset" aria-label="Reset level">Reset</button>
 </header>
 <div id="stage"><canvas id="cv"></canvas>
+  <div id="selbar"><div id="selact" class="grp"></div><div id="rot" class="grp"><button id="rL" aria-label="Turn left">Turn left</button><button id="rR" aria-label="Turn right">Turn right</button></div></div>
   <div id="over"><div class="card" id="card"></div></div>
 </div>
 <div id="shelf"></div>
@@ -69,9 +72,7 @@ footer{justify-content:center;min-height:58px;flex-wrap:wrap}
   <button id="bHint" aria-label="Show a hint">Hint</button>
   <button id="bWave" aria-label="Toggle wave animation">Waves: on</button>
   <button id="bGuide" aria-label="Toggle guides">Guides: on</button>
-  <div id="selact" class="grp"></div>
-  <div id="rot" class="grp"><button id="rL" aria-label="Turn left">Turn left</button><button id="rR" aria-label="Turn right">Turn right</button></div>
-</footer>
+  </footer>
 <script>
 const W=1000,H=600,NW=40,LG=6;
 const WL=[];for(let i=0;i<NW;i++)WL.push(400+300*i/(NW-1));
