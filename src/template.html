@@ -96,6 +96,7 @@ let done=[];const introSeen={};
 try{done=JSON.parse(localStorage.getItem('refract-done')||'[]')}catch(e){done=[]}
 function saveDone(){try{localStorage.setItem('refract-done',JSON.stringify(done))}catch(e){}}
 const RGB=WL.map(wlRGB).map(c=>c.map(v=>Math.min(255,Math.round(v*0.88+28))));
+const RGBF=[];for(let k=0;k<=(NW-1)*SUB;k++)RGBF.push(wlRGB(400+k*300/((NW-1)*SUB)).map(v=>Math.min(255,Math.round(v*0.88+28))));
 let LV=LEVELS[0],endless=null,etier=1,ecount=0;
 try{const e=JSON.parse(localStorage.getItem('refract-endless')||'{}');etier=e.tier||1;ecount=e.n||0}catch(e){}
 function saveEndless(){try{localStorage.setItem('refract-endless',JSON.stringify({tier:etier,n:ecount}))}catch(e){}}
@@ -676,7 +677,7 @@ function draw(time){
     const step=Math.max(6,(lastTrace.totalLen||0)/5000),coh=!!LV.coh;
     for(const pass of [0,1]){
       for(const r of lastTrace.rays){
-        const c=RGB[r.i],a=Math.min(1,r.I*r.K);
+        const c=RGBF[r.ci!==undefined?r.ci:r.i*SUB]||RGB[r.i],a=Math.min(1,r.I*r.K);
         ctx.strokeStyle='rgba('+c[0]+','+c[1]+','+c[2]+','+(pass?0.5*a:0.07*a)+')';
         ctx.lineWidth=pass?2.2:8;
         const dx=r.x2-r.x1,dy=r.y2-r.y1,L=Math.hypot(dx,dy);

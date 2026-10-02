@@ -59,8 +59,10 @@ const BOX=[[0,0,W,0],[W,0,W,H],[W,H,0,H],[0,H,0,0]].map(([a,b,c,d])=>({x1:a,y1:b
 // Game rule: the pull depends on wavelength, so shorter wavelengths bend more and white light
 // fans out like it does in glass. GS scales the effective horizon radius (0.7 at 700 nm, 1.3 at 400 nm).
 const GS=wl=>1+0.3*(550-wl)/150;
+const wlOf=r=>r.wl!==undefined?r.wl:WL[r.i];
+const SUB=4;
 function bhChord(r,bhs){
-  const gs=GS(WL[r.i]);
+  const gs=GS(wlOf(r));
   let nb=null,nd=1e9;
   for(const b of bhs){const d=Math.hypot(r.x-b.x,r.y-b.y);if(d<nd){nd=d;nb=b}}
   const rs=nb.r*gs;
@@ -110,13 +112,20 @@ function trace(pieces){
     const dx=Math.cos(e.a),dy=Math.sin(e.a),px=-dy,py=dx;
     for(let i=0;i<NW;i++)if(WL[i]>=e.band[0]&&WL[i]<=e.band[1]){
       minI=Math.min(minI,i);emitted.push(i);
-      for(let k=0;k<e.nb;k++){
-        const off=e.nb>1?(k/(e.nb-1)-0.5)*e.w:0;
-        stack.push({x:e.x+dx*16+px*off,y:e.y+dy*16+py*off,dx,dy,i,I:1/e.nb,K:e.nb,ins:null,d:0,pol:e.pol*D2R,ph:0,vp:0});
+      // Gravity spreads the beam and the spectrum, so with a black hole in play the
+      // emitter fires extra rays: sub-wavelengths for a thin beam, a denser beam for a wide one.
+      const sub=bhs.length&&e.nb===1?SUB:1,nbe=bhs.length&&e.nb>1?e.nb*3-2:e.nb,step=300/(NW-1);
+      for(let k=0;k<nbe;k++){
+        const off=nbe>1?(k/(nbe-1)-0.5)*e.w:0;
+        for(let q=0;q<sub;q++){
+          const o={x:e.x+dx*16+px*off,y:e.y+dy*16+py*off,dx,dy,i,I:1/(nbe*sub),K:nbe*sub,ins:null,d:0,pol:e.pol*D2R,ph:0,vp:0};
+          if(sub>1)o.wl=WL[i]+(q-(sub-1)/2)*step/sub;
+          stack.push(o);
+        }
       }
     }
   }
-  const mk=(r,o)=>Object.assign({x:r.x,y:r.y,dx:r.dx,dy:r.dy,i:r.i,I:r.I,K:r.K,ins:r.ins,d:r.d+1,pol:r.pol,ph:r.ph,vp:r.vp},o);
+  const mk=(r,o)=>Object.assign({wl:r.wl,x:r.x,y:r.y,dx:r.dx,dy:r.dy,i:r.i,I:r.I,K:r.K,ins:r.ins,d:r.d+1,pol:r.pol,ph:r.ph,vp:r.vp},o);
   let guard=0;
   while(stack.length&&guard++<400000){
     let r=stack.pop();
@@ -141,10 +150,10 @@ function trace(pieces){
       if(disc>0){const t=-b-Math.sqrt(disc);if(t>1e-4&&t<bt){bt=t;bs=null;bg=gi;bd=null}}
     }
     const hx=r.x+r.dx*bt,hy=r.y+r.dy*bt;
-    const lamg=WL[r.i]/LG;
-    const nn=r.ins?ior(WL[r.i]):1,dph=2*Math.PI*bt*nn/lamg;
+    const lamg=wlOf(r)/LG;
+    const nn=r.ins?ior(wlOf(r)):1,dph=2*Math.PI*bt*nn/lamg;
     const ph=r.ph+dph,vp=r.vp+dph;
-    out.push({x1:r.x,y1:r.y,x2:hx,y2:hy,i:r.i,I:r.I,K:r.K,pol:r.pol,vp0:r.vp,ph0:r.ph,n:nn});
+    out.push({x1:r.x,y1:r.y,x2:hx,y2:hy,i:r.i,ci:r.wl!==undefined?Math.round((r.wl-400)*SUB*(NW-1)/300):r.i*SUB,I:r.I,K:r.K,pol:r.pol,vp0:r.vp,ph0:r.ph,n:nn});
     if(ch&&!bs&&!bd&&bg<0){if(!ch.cap)stack.push(Object.assign({},r,{x:hx,y:hy,dx:ch.dx2,dy:ch.dy2,ph,vp}));continue}
     if(bg>=0){const s=st[bg],a=Math.sqrt(r.I);s.inc[r.i]+=r.I;s.re[r.i]+=a*Math.cos(ph);s.im[r.i]+=a*Math.sin(ph);continue}
     if(bd){
@@ -159,7 +168,7 @@ function trace(pieces){
     if(k==='wall')continue;
     const base=Object.assign({},r,{x:hx,y:hy,ph,vp});
     if(k==='filter'){
-      if(WL[r.i]>=p.band[0]&&WL[r.i]<=p.band[1])stack.push(mk(base,{}));
+      if(wlOf(r)>=p.band[0]&&wlOf(r)<=p.band[1])stack.push(mk(base,{}));
       continue;
     }
     const sl=Math.hypot(bs.x2-bs.x1,bs.y2-bs.y1),ex=(bs.x2-bs.x1)/sl,ey=(bs.y2-bs.y1)/sl;
@@ -169,7 +178,7 @@ function trace(pieces){
     const rx=r.dx-2*dn*nx,ry=r.dy-2*dn*ny;
     if(k==='mirror'){stack.push(mk(base,{dx:rx,dy:ry,ph:ph+Math.PI}));continue}
     if(k==='dichro'){
-      if(WL[r.i]>=p.band[0]&&WL[r.i]<=p.band[1])stack.push(mk(base,{dx:rx,dy:ry,ph:ph+Math.PI}));
+      if(wlOf(r)>=p.band[0]&&wlOf(r)<=p.band[1])stack.push(mk(base,{dx:rx,dy:ry,ph:ph+Math.PI}));
       else stack.push(mk(base,{}));
       continue;
     }
@@ -193,7 +202,7 @@ function trace(pieces){
       stack.push(mk(base,{dx:ux,dy:uy}));continue;
     }
     if(k==='glass'){
-      const n=ior(WL[r.i]);
+      const n=ior(wlOf(r));
       const inside=r.ins===p,n1=inside?n:1,n2=inside?1:n,eta=n1/n2;
       const ci=-dn,kk=1-eta*eta*(1-ci*ci);
       if(kk<0){ev.push({x:hx,y:hy,nx,ny,dx:r.dx,dy:r.dy,ox:rx,oy:ry,i:r.i,tir:1});stack.push(mk(base,{dx:rx,dy:ry}))}
