@@ -152,6 +152,7 @@ const MK={
   pbs:()=>({t:'pbs',a:45,ax:0}),
   phase:()=>({t:'phase',ax:0}),
   wall:()=>({t:'wall',w:30,h:160,a:0}),
+  bh:()=>({t:'bh',r:16}),
   goal:()=>({t:'goal',band:[400,700],r:15,show:1})
 };
 const FLIST=[-200,-120,-80,80,120,160,240,320];
@@ -170,9 +171,9 @@ function sbxStart(fresh){
   begin({name:'Sandbox',hint:'Open a drawer and take any piece, as many as you like. Drag a piece back onto the shelf to remove it.',pieces:list,sol:{},pol:1,coh:1,sandbox:1});
 }
 // ---- shelf: drawers of pieces to place; levels stock it with a fixed quantity
-const CATS=[['light','Light',['emit','goal']],['mirror','Mirrors',['mirror','split','dichro']],['glass','Glass',['prism','orb']],['lens','Lenses',['lens','zlens']],['color','Color',['filter']],['pol','Polarization',['pol','hwp','pbs']],['wave','Waves',['phase']],['wall','Walls',['wall']]];
+const CATS=[['light','Light',['emit','goal']],['gravity','Gravity',['bh']],['mirror','Mirrors',['mirror','split','dichro']],['glass','Glass',['prism','orb']],['lens','Lenses',['lens','zlens']],['color','Color',['filter']],['pol','Polarization',['pol','hwp','pbs']],['wave','Waves',['phase']],['wall','Walls',['wall']]];
 const catOf=t=>{const c=CATS.find(c=>c[2].includes(t));return c?c[0]:'wall'};
-const SB_ITEMS=['emit','goal','mirror','split','dichro','prism','orb','lens','concave','zlens','filter','pol','hwp','pbs','phase','wall'];
+const SB_ITEMS=['emit','goal','bh','mirror','split','dichro','prism','orb','lens','concave','zlens','filter','pol','hwp','pbs','phase','wall'];
 let shelf=[],openCat=null,drag=null;
 function sigOf(p){return p.t+(p.t==='lens'?p.f:'')+((p.t==='filter'||p.t==='dichro')?p.band.join('-'):'')}
 function labelOf(p){
@@ -181,7 +182,7 @@ function labelOf(p){
     case 'dichro':return BNAME(p.band)+' dichroic';case 'prism':return 'Prism';case 'orb':return 'Glass ball';
     case 'lens':return p.f>0?'Convex '+p.f:'Concave '+(-p.f);case 'zlens':return 'Zoom lens';
     case 'filter':return BNAME(p.band)+' filter';case 'pol':return 'Polarizer';case 'hwp':return 'Waveplate';
-    case 'pbs':return 'Pol. splitter';case 'phase':return 'Phase plate';case 'wall':return 'Wall';
+    case 'bh':return 'Black hole';case 'pbs':return 'Pol. splitter';case 'phase':return 'Phase plate';case 'wall':return 'Wall';
   }
   return p.t;
 }
@@ -234,6 +235,7 @@ function drawIcon(c,it){
   else if(t==='pbs'){g.strokeStyle='#2f5a55';g.lineWidth=9;L(-22,12,22,-12);g.strokeStyle='#9fe3d0';g.lineWidth=3.5;g.setLineDash([7,4]);L(-22,12,22,-12);g.setLineDash([])}
   else if(t==='wall'){g.fillStyle='#1a1f2e';g.strokeStyle='#3a4360';g.lineWidth=2;g.fillRect(-7,-18,14,36);g.strokeRect(-7,-18,14,36)}
   else if(t==='emit'){g.fillStyle='#161b28';g.strokeStyle='#fff';g.lineWidth=3;g.fillRect(-18,-12,26,24);g.strokeRect(-18,-12,26,24);g.fillStyle='#fff';g.beginPath();g.moveTo(10,-6);g.lineTo(19,0);g.lineTo(10,6);g.fill()}
+  else if(t==='bh'){const gr=g.createRadialGradient(0,0,8,0,0,22);gr.addColorStop(0,'rgba(255,170,90,.5)');gr.addColorStop(1,'rgba(255,170,90,0)');g.fillStyle=gr;g.beginPath();g.arc(0,0,22,0,7);g.fill();g.fillStyle='#000';g.strokeStyle='rgba(255,190,120,.9)';g.lineWidth=2;g.beginPath();g.arc(0,0,9,0,7);g.fill();g.stroke()}
   else if(t==='goal'){g.fillStyle='#0d1018';g.strokeStyle='#fff';g.lineWidth=3;g.beginPath();g.arc(0,0,13,0,7);g.fill();g.stroke()}
 }
 function renderShelf(){
@@ -303,6 +305,7 @@ function updSel(){
       h+='<button class="del" data-act="del">Delete</button>';
       if(BANDS[sel.t])h+='<button data-act="band">Color: '+BNAME(sel.band)+'</button>';
       if(sel.t==='emit'){h+='<button data-act="wide">Beam: '+(sel.w?'wide':'narrow')+'</button><button data-act="pol">Polarization '+fmt(sel.pol||0)+'</button>'}
+      if(sel.t==='bh')h+='<button data-act="smaller">Smaller</button><button data-act="larger">Larger</button><button disabled>Size '+sel.r+'</button>';
       if(sel.t==='lens')h+='<button data-act="focal">Focal length '+fmtF(sel.f)+'</button>';
     }else if(sel.shelfKey!==undefined)h+='<button data-act="del">Put back</button>';
   }
@@ -316,6 +319,8 @@ function sbxDo(act){
   else if(sel&&act==='band'){const L=BANDS[sel.t],i=L.findIndex(b=>b[0]===sel.band[0]&&b[1]===sel.band[1]);sel.band=L[(i+1)%L.length]}
   else if(sel&&act==='wide'){if(sel.w){sel.w=0;sel.nb=1}else{sel.w=60;sel.nb=9}}
   else if(sel&&act==='pol'){sel.pol=((sel.pol||0)+22.5)%180}
+  else if(sel&&act==='smaller')sel.r=Math.max(6,sel.r-2);
+  else if(sel&&act==='larger')sel.r=Math.min(60,sel.r+2);
   else if(sel&&act==='focal'){const i=FLIST.indexOf(sel.f);sel.f=FLIST[(i+1)%FLIST.length]}
   updateCtl();dirty=true;if(sandbox)sbxSave();updSel();
 }
@@ -364,6 +369,7 @@ cv.addEventListener('pointerdown',e=>{
   if(solved)return;
   cv.setPointerCapture(e.pointerId);
   const w=toW(e);
+  if(sel&&sel.t==='bh'&&!sel.fixed&&Math.hypot(w.x-(sel.x+sel.r),w.y-sel.y)<26/Math.max(sc,0.5)){mode='size';return}
   if(sel&&DIALS[sel.t]){const k=dialPos(sel);if(Math.hypot(w.x-k.x,w.y-k.y)<30/Math.max(sc,0.5)){mode='dial';return}}
   if(sel&&!sel.norot){const h=handlePos(sel);if(Math.hypot(w.x-h.x,w.y-h.y)<32/Math.max(sc,0.5)){mode='rot';return}}
   let f=null;
@@ -375,6 +381,7 @@ cv.addEventListener('pointerdown',e=>{
 cv.addEventListener('pointermove',e=>{
   if(!sel||!mode)return;
   const w=toW(e);
+  if(mode==='size'){sel.r=Math.max(6,Math.min(60,Math.round(Math.hypot(w.x-sel.x,w.y-sel.y))));dirty=true;return}
   if(mode==='dial'){
     const D=DIALS[sel.t];
     let g=Math.atan2(w.y-sel.y,w.x-sel.x)/D2R;
@@ -420,6 +427,8 @@ window.addEventListener('keydown',e=>{
   const s=e.shiftKey?1:5;
   if(e.key==='q'||e.key==='ArrowLeft')turn(-s);
   else if(e.key==='e'||e.key==='ArrowRight')turn(s);
+  else if((e.key==='['||e.key==='ArrowDown')&&sel&&sel.t==='bh'&&!sel.fixed){sel.r=Math.max(6,sel.r-2);dirty=true;if(sandbox){sbxSave();updSel()}}
+  else if((e.key===']'||e.key==='ArrowUp')&&sel&&sel.t==='bh'&&!sel.fixed){sel.r=Math.min(60,sel.r+2);dirty=true;if(sandbox){sbxSave();updSel()}}
   else if(e.key==='['||e.key==='ArrowDown')dial(-1);
   else if(e.key===']'||e.key==='ArrowUp')dial(1);
   else if(e.key==='r')restart();
@@ -551,6 +560,15 @@ function phaseBadge(x,y,deg,col){
   if(deg>0){ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(x,y);ctx.arc(x,y,8,-Math.PI/2,-Math.PI/2+deg*D2R);ctx.closePath();ctx.fill()}
 }
 function polyPath(sg){ctx.beginPath();ctx.moveTo(sg[0].x1,sg[0].y1);sg.forEach(s=>ctx.lineTo(s.x2,s.y2));ctx.closePath()}
+function drawBH(p){
+  const rs=p.r,g=ctx.createRadialGradient(p.x,p.y,rs*0.8,p.x,p.y,rs*3.6);
+  g.addColorStop(0,'rgba(255,170,90,.38)');g.addColorStop(0.35,'rgba(255,140,70,.12)');g.addColorStop(1,'rgba(255,140,70,0)');
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,rs*3.6,0,7);ctx.fill();
+  ctx.strokeStyle='rgba(255,214,150,.5)';ctx.lineWidth=1.6;ctx.setLineDash([2,5]);
+  ctx.beginPath();ctx.arc(p.x,p.y,rs*1.5,0,7);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='#000';ctx.beginPath();ctx.arc(p.x,p.y,rs,0,7);ctx.fill();
+  ctx.strokeStyle='rgba(255,190,120,.85)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.x,p.y,rs,0,7);ctx.stroke();
+}
 function drawLens(p){
   ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.a);
   const h=p.len/2,f=p.t==='zlens'?zf(p):p.f,str=Math.min(1,110/Math.abs(f)),bu=3+14*str;ctx.beginPath();
@@ -600,6 +618,7 @@ function marks(p){
   }
 }
 function drawPiece(p){
+  if(p.t==='bh'){drawBH(p);return}
   if(p.t==='prism'||p.t==='orb'){
     polyPath(segsOf(p));ctx.strokeStyle='rgba(205,228,255,0.85)';ctx.lineWidth=2.5;ctx.lineJoin='round';ctx.stroke();return;
   }
@@ -690,6 +709,11 @@ function draw(time){
         ctx.fillStyle='#ffd27a';ctx.beginPath();ctx.arc(k.x,k.y,9,0,7);ctx.fill();
         ctx.fillStyle='#ffd27a';ctx.font='600 13px system-ui,sans-serif';ctx.textAlign='center';
         ctx.fillText(dialLabel(p),p.x,p.y+radius(p)+26);
+      }
+      if(p.t==='bh'&&!p.fixed){
+        ctx.strokeStyle='rgba(255,210,122,.7)';ctx.lineWidth=1.5;ctx.setLineDash([3,4]);ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.stroke();ctx.setLineDash([]);
+        ctx.fillStyle='#ffd27a';ctx.beginPath();ctx.arc(p.x+p.r,p.y,9,0,7);ctx.fill();
+        ctx.font='600 13px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText('Size '+p.r,p.x,p.y+p.r*1.5+24);
       }
       if(!p.norot){
         const h=handlePos(p);

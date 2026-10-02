@@ -326,6 +326,7 @@ const NAMES={
   combine:['Melting pot','Merge lane','Colour mixer','Funnel','Two become one','Rendezvous','Convergence','Blend','Coalesce','Meeting point','Mixing desk','Union','Slot machine','Rejoin','Through the slit','Bottleneck'],
   prism:['Rainbow chase','Dispersion','Pick a colour','Newton\u2019s trick','Spectral line','Dark side','Glass act','Fringe','Spread the light','Triangle','Roy G. Biv','Cut glass','Crystal clear','Pink Floyd','Chasing rainbows','Dispersal','Glass wedge','Colour fan'],
   orb:['Glass ball','Crystal ball','Marble','Dewdrop','Raindrop','Bubble','Fisheye','Snow globe','Fishbowl','Sphere of influence','Pearl','Bead','Droplet','Orbital','Cat\u2019s eye','Moonstone','Globe trotter','Rolling stone','Water drop','Glass eye','Gumball','Planetarium','Round trip','Full circle','Bauble','Sea glass','Orb weaver','Ball bearing','Pebble','Looking sphere'],
+  hole:['Event horizon','Slingshot','Gravity assist','Point of no return','Singularity','Dark star','Schwarzschild','Light trap','Deep well','Fall line','Photon sphere','Lensing','Gravity well','Spaghettification','Hawking','Dark matter','Bent light','Orbital insertion','Cosmic string','Dark companion'],
   focus:['Burning glass','Sharp focus','Pinpoint','Magnifier','Bullseye','Hot spot','Fine point','Spotlight','Zoom in','Focal point','Sunbeam','Magnify','Convergent','Tight beam','Laser pointer','Hit the dot','Ignition','Burning question'],
   zoom:['Zoom lens','Squeeze play','Variable focus','Telephoto','Autofocus','Dial a focus','Rack focus','Bellows','Focus puller','Eyepiece','Iris','Adjustable','Pull focus','Macro','Sliding scale II','Rubber lens'],
   spread:['Fan out','Wide angle','Spread thin','Broadcast','Diverge','Peacock','Floodlight','Sprinkler','Starburst','Open wide','Scatter','Umbrella','Spotlight reverse','Wide load'],
@@ -342,6 +343,7 @@ const HINT={
   fan:'A splitter sends half the light each way. Every target needs some.',
   sorter:'A dichroic mirror reflects its colors and passes the rest. Send each color to its own target.',
   combine:'Merge the beams so every color passes through the slot.',
+  hole:'A black hole bends light toward it and swallows anything that crosses the black disc. Place the mirrors where the bent beam arrives.',
   orb:'A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.',
   prism:'Glass bends each color differently. Find the angle that sends only the target color in.',
   zoom:'This lens squeezes to any focal length. Slide it and set its dial so the focus lands on the target.',
@@ -552,6 +554,101 @@ function famSpread(rnd,c){
   for(const g of sp.goals)keep.pts.push([g.p.x,g.p.y,60]);
   addWalls(rnd,sp,keep,c<3?1:2,null,wB/2);
   return {sp,meta:{name:pickName(rnd,zoom?'zoom':'spread'),hint:zoom?HINT.zoomspread:HINT.spread}};
+}
+
+
+// Black holes: the beam is bent by gravity, so the path is found by simulation. The mirrors go
+// where the bent beam arrives, and the level checks that the same layout fails with no hole.
+function pathOf(tr,iw){return tr.rays.filter(q=>q.i===iw).map(q=>[q.x1,q.y1,q.x2,q.y2])}
+function pathLen(p){return p.reduce((a,s)=>a+Math.hypot(s[2]-s[0],s[3]-s[1]),0)}
+function pointAt(p,sArc){
+  let acc=0;
+  for(const s of p){
+    const l=Math.hypot(s[2]-s[0],s[3]-s[1]);
+    if(acc+l>=sArc&&l>0){const f=(sArc-acc)/l;return {x:s[0]+(s[2]-s[0])*f,y:s[1]+(s[3]-s[1])*f,ang:Math.atan2(s[3]-s[1],s[2]-s[0])/R}}
+    acc+=l;
+  }
+  return null;
+}
+function closestArc(p,bh){
+  let acc=0,best=1e9,bs=0;
+  for(const s of p){
+    const l=Math.hypot(s[2]-s[0],s[3]-s[1]),d=pSeg(bh.x,bh.y,s[0],s[1],s[2],s[3]);
+    if(d<best){best=d;bs=acc+l/2}
+    acc+=l;
+  }
+  return {arc:bs,d:best};
+}
+function famHole(rnd,c){
+  const sp=newSpec(),band=pick(rnd,[RED,GRN,BLU]);
+  const iw=band===RED?30:band===GRN?18:8;
+  const rs=5*ri(rnd,3,5);
+  const bhs=[{t:'bh',x:5*ri(rnd,70,130),y:5*ri(rnd,45,75),r:rs,fixed:1}];
+  if(c>=4&&rnd()<0.6){
+    const q={t:'bh',x:5*ri(rnd,50,150),y:5*ri(rnd,30,90),r:5*ri(rnd,2,3),fixed:1};
+    if(Math.hypot(q.x-bhs[0].x,q.y-bhs[0].y)>260)bhs.push(q);
+  }
+  const bh=bhs[0],b=rs*rr(rnd,3,7)*(rnd()<0.5?-1:1);
+  const nPre=c>=3?ri(rnd,0,1):0,nPost=c<=1?1:(c<=3?ri(rnd,1,2):2);
+  // incoming beam passes the hole at offset b
+  const d1=10*ri(rnd,-6,6)+(rnd()<0.5?0:180),dd=dv(d1),pn=[-dd[1],dd[0]];
+  const D1=5*ri(rnd,50,80);
+  let ex,ey,pre=null;
+  if(nPre===0){ex=bh.x-dd[0]*D1+pn[0]*b;ey=bh.y-dd[1]*D1+pn[1]*b}
+  else{
+    const P=[bh.x-dd[0]*D1+pn[0]*b,bh.y-dd[1]*D1+pn[1]*b],t=pick(rnd,TURNS),d0=n360(d1-t),L0=5*ri(rnd,40,60),v0=dv(d0);
+    ex=P[0]-v0[0]*L0;ey=P[1]-v0[1]*L0;
+    pre={x:P[0],y:P[1],a:turnMirror(d0,d1)};
+  }
+  if(!inB(ex,ey,40)||(pre&&!inB(pre.x,pre.y,50)))return null;
+  const d0=nPre===0?d1:n360(d1-0);
+  const em={t:'emit',x:ex,y:ey,a:nPre===0?d1:Math.atan2(pre.y-ey,pre.x-ex)/R,band,fixed:1};
+  sp.emit.push(em);
+  for(const q of bhs)sp.fix.push(q);
+  if(pre)addMov(sp,{t:'mirror',x:pre.x,y:pre.y,a:pre.a});
+  void d0;
+  snapMov(sp);for(const e of sp.emit){e.x=r5(e.x);e.y=r5(e.y)}
+  const run=()=>evalRaw(assemble(sp));
+  let tr=run(),path=pathOf(tr,iw),sPrev=0;
+  const minD=()=>Math.min(...bhs.map(q=>closestArc(path,q).d));
+  if(path.length<3||minD()<rs*1.3)return null;
+  let sArc=closestArc(path,bh).arc;
+  const nodes=[[ex,ey,70]].concat(bhs.map(q=>[q.x,q.y,q.r*3+40]));
+  if(pre)nodes.push([pre.x,pre.y,90]);
+  for(let k=0;k<nPost;k++){
+    let placed=false;
+    for(let tr2=0;tr2<14&&!placed;tr2++){
+      const s=Math.max(sArc,sPrev)+rr(rnd,130,280),pt=pointAt(path,s);
+      if(!pt||!inB(pt.x,pt.y,60))continue;
+      if(bhs.some(q=>Math.hypot(pt.x-q.x,pt.y-q.y)<q.r*3+60))continue;
+      if(nodes.some(n=>Math.hypot(pt.x-n[0],pt.y-n[1])<110))continue;
+      const t=pick(rnd,TURNS),a=turnMirror(pt.ang,pt.ang+t);
+      const mx=r5(pt.x),my=r5(pt.y);
+      sp.mov.push({p:{t:'mirror',x:mx,y:my,a}});
+      const t2=run(),p2=pathOf(t2,iw);
+      if(p2.length<3||Math.min(...bhs.map(q=>closestArc(p2,q).d))<rs*1.3){sp.mov.pop();continue}
+      path=p2;sPrev=s;placed=true;nodes.push([mx,my,90]);
+    }
+    if(!placed)return null;
+  }
+  // goal on the final leg
+  let goal=null;
+  for(let t=0;t<20&&!goal;t++){
+    const pt=pointAt(path,sPrev+rr(rnd,150,300));
+    if(!pt||!inB(pt.x,pt.y,45))continue;
+    if(bhs.some(q=>Math.hypot(pt.x-q.x,pt.y-q.y)<q.r*3+50))continue;
+    if(nodes.some(n=>Math.hypot(pt.x-n[0],pt.y-n[1])<95))continue;
+    goal=pt;
+  }
+  if(!goal)return null;
+  makeGoal(sp,{t:'goal',x:goal.x,y:goal.y,band,r:18,fixed:1},[16,19,23,28]);
+  sp.allowFail=2;
+  // gravity must matter: with the holes gone the layout must not light the target
+  const t0=evalRaw(assemble(sp).filter(q=>q.t!=='bh'));
+  if(allLit(t0.res))return null;
+  const keep={legs:path.map(s=>({x1:s[0],y1:s[1],x2:s[2],y2:s[3]})),pts:nodes.concat([[goal.x,goal.y,60]]),walls:[]};
+  addWalls(rnd,sp,keep,c<3?0:1,null);
+  return {sp,meta:{name:pickName(rnd,'hole'),hint:HINT.hole}};
 }
 
 function famPinhole(rnd,c){
@@ -820,8 +917,8 @@ function famGlass(rnd,c,kind){
   return {sp,meta:{name:pickName(rnd,orb?'orb':'prism'),hint:orb?HINT.orb:HINT.prism}};
 }
 
-const FAMS={zoom:(r,c)=>famFocus(r,c,true),spread:famSpread,prism:(r,c)=>famGlass(r,c,'prism'),orb:(r,c)=>famGlass(r,c,'orb'),relay:famRelay,fan:famFan,sorter:famSorter,combine:famCombine,focus:famFocus,pinhole:famPinhole,polchain:famPolChain,polsplit:famPolSplit,mz:famMZ,mich:famMich};
-const MIN_TIER={zoom:1,spread:1,prism:1,orb:1,relay:1,fan:1,sorter:1,combine:2,focus:1,pinhole:2,polchain:1,polsplit:1,mz:1,mich:2};
+const FAMS={hole:famHole,zoom:(r,c)=>famFocus(r,c,true),spread:famSpread,prism:(r,c)=>famGlass(r,c,'prism'),orb:(r,c)=>famGlass(r,c,'orb'),relay:famRelay,fan:famFan,sorter:famSorter,combine:famCombine,focus:famFocus,pinhole:famPinhole,polchain:famPolChain,polsplit:famPolSplit,mz:famMZ,mich:famMich};
+const MIN_TIER={hole:2,zoom:1,spread:1,prism:1,orb:1,relay:1,fan:1,sorter:1,combine:2,focus:1,pinhole:2,polchain:1,polsplit:1,mz:1,mich:2};
 function familiesFor(c){return Object.keys(FAMS).filter(k=>MIN_TIER[k]<=c)}
 
 // ---------- public

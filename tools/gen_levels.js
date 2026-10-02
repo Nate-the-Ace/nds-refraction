@@ -7,14 +7,13 @@ const out=[],names=new Set(),count={};
 const score=lv=>lv.pieces.filter(p=>!p.fixed).length*3+lv.pieces.filter(p=>p.t==='goal').length*2+lv.pieces.filter(p=>p.t==='wall').length;
 for(let tier=1;tier<=5;tier++){
   const fams=G.familiesFor(tier),want=[];
-  // balanced family mix: cycle through the families
-  for(let k=0;k<20;k++)want.push(fams[k%fams.length]);
-  // glass balls and lenses are a must: guaranteed minimum per tier
-  const MIN={orb:4,zoom:2,spread:1,focus:2};
-  for(const f in MIN){
-    let o=want.filter(x=>x===f).length;
-    for(let k=19;o<MIN[f]&&k>=0;k--)if(!(f in MIN&&want[k] in MIN)&&want[k]!==f){want[k]=f;o++}
-  }
+  // glass balls, lenses and black holes are a must; every other family appears at least once
+  const MIN={orb:3,zoom:1,spread:1,focus:1};
+  if(tier>=2)MIN.hole=tier===2?2:tier===3?2:3;
+  for(const f in MIN)for(let k=0;k<MIN[f];k++)want.push(f);
+  for(const f of fams)if(!want.includes(f))want.push(f);
+  for(let k=0;want.length<20;k++)want.push(fams[(k*5+tier)%fams.length]);
+  want.length=20;
   const lvs=[];
   want.forEach((fam,k)=>{
     for(let a=0;a<400;a++){

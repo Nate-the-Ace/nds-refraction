@@ -20,6 +20,7 @@ function normalize(p){
   if(L[p.t])p.len=p.len||L[p.t];
   if(p.t==='prism')p.r=p.r||60;
   if(p.t==='orb'){p.r=p.r||50;p.norot=1}
+  if(p.t==='bh'){p.r=p.r||16;p.norot=1}
   if(DISC[p.t]){p.r=p.r||30;p.norot=1}
   if(p.t==='goal')p.r=p.r||15;
   if(p.t==='lens'&&p.f===undefined)p.f=160;
@@ -52,9 +53,49 @@ function segsOf(p){
   return [];
 }
 const BOX=[[0,0,W,0],[W,0,W,H],[W,H,0,H],[0,H,0,0]].map(([a,b,c,d])=>({x1:a,y1:b,x2:c,y2:d,k:'wall',p:null}));
+// Black holes: light follows Schwarzschild null geodesics. In the plane, with u=1/r and
+// the angle phi around the hole, u'' = -u + 1.5*rs*u^2 (rs = horizon radius). Rays are
+// advanced in short chords by integrating that equation; inside rs they are swallowed.
+function bhChord(r,bhs){
+  let nb=null,nd=1e9;
+  for(const b of bhs){const d=Math.hypot(r.x-b.x,r.y-b.y);if(d<nd){nd=d;nb=b}}
+  const rs=nb.r;
+  if(nd<=rs)return {cap:1,len:0};
+  const dx=r.x-nb.x,dy=r.y-nb.y;
+  const cp=(dx*r.dx+dy*r.dy)/nd,sn=(dx*r.dy-dy*r.dx)/nd,as=Math.abs(sn);
+  let L=Math.max(5,Math.min(40,nd*0.18));
+  if(cp<0)L=Math.min(L,nd-rs+1);
+  let x2,y2,dx2,dy2,cap=0;
+  if(as<0.03){x2=r.x+r.dx*L;y2=r.y+r.dy*L;dx2=r.dx;dy2=r.dy;if(Math.hypot(x2-nb.x,y2-nb.y)<=rs)cap=1}
+  else{
+    const sg=sn>0?1:-1,u0=1/nd,k=1.5*rs;
+    let u=u0,w=-u0*cp/as;
+    const dphi=L*as/nd,n=Math.max(1,Math.ceil(dphi/0.08)),h=dphi/n;
+    for(let i=0;i<n&&!cap;i++){
+      const a1=-u+k*u*u,u2=u+h/2*w,w2=w+h/2*a1,a2=-u2+k*u2*u2,u3=u+h/2*w2,w3=w+h/2*a2,a3=-u3+k*u3*u3,u4=u+h*w3,w4=w+h*a3,a4=-u4+k*u4*u4;
+      u+=h/6*(w+2*w2+2*w3+w4);w+=h/6*(a1+2*a2+2*a3+a4);
+      if(u>=1/rs)cap=1;
+    }
+    if(u<=1e-7)u=1e-7;
+    const phi=Math.atan2(dy,dx)+sg*dphi,rr=1/u;
+    x2=nb.x+rr*Math.cos(phi);y2=nb.y+rr*Math.sin(phi);
+    const q=w/u,vp=1/Math.sqrt(1+q*q),vr=-q*vp;
+    dx2=vr*Math.cos(phi)-sg*vp*Math.sin(phi);dy2=vr*Math.sin(phi)+sg*vp*Math.cos(phi);
+  }
+  for(const b of bhs){
+    if(b===nb)continue;
+    const bx=b.x-x2,by=b.y-y2,d=Math.hypot(bx,by),dd=bx*dx2+by*dy2,px=bx-dd*dx2,py=by-dd*dy2;
+    const f=b.r*L/(d*d*d);dx2+=px*f;dy2+=py*f;
+  }
+  const hl=Math.hypot(dx2,dy2);dx2/=hl;dy2/=hl;
+  const cx=x2-r.x,cy=y2-r.y,len=Math.hypot(cx,cy);
+  if(len<1e-9)return {cap:1,len:0};
+  return {cap,len,cx:cx/len,cy:cy/len,x2,y2,dx2,dy2};
+}
 function trace(pieces){
-  const segs=[],goals=[],emit=[],discs=[];
+  const segs=[],goals=[],emit=[],discs=[],bhs=[];
   for(const p of pieces){
+    if(p.t==='bh'){bhs.push(p);continue}
     if(p.t==='goal')goals.push(p);else if(p.t==='emit')emit.push(p);else if(DISC[p.t])discs.push(p);else segs.push(...segsOf(p));
   }
   segs.push(...BOX);
@@ -73,10 +114,12 @@ function trace(pieces){
   }
   const mk=(r,o)=>Object.assign({x:r.x,y:r.y,dx:r.dx,dy:r.dy,i:r.i,I:r.I,K:r.K,ins:r.ins,d:r.d+1,pol:r.pol,ph:r.ph,vp:r.vp},o);
   let guard=0;
-  while(stack.length&&guard++<60000){
-    const r=stack.pop();
+  while(stack.length&&guard++<400000){
+    let r=stack.pop();
     if(r.d>30||r.I<0.01)continue;
-    let bt=1e9,bs=null,bg=-1,bd=null;
+    let ch=null;
+    if(bhs.length){ch=bhChord(r,bhs);if(ch.len<=0)continue;r=Object.assign({},r,{dx:ch.cx,dy:ch.cy})}
+    let bt=ch?ch.len:1e9,bs=null,bg=-1,bd=null;
     for(const s of segs){
       const ex=s.x2-s.x1,ey=s.y2-s.y1,den=r.dx*ey-r.dy*ex;
       if(Math.abs(den)<1e-9)continue;
@@ -98,6 +141,7 @@ function trace(pieces){
     const nn=r.ins?ior(WL[r.i]):1,dph=2*Math.PI*bt*nn/lamg;
     const ph=r.ph+dph,vp=r.vp+dph;
     out.push({x1:r.x,y1:r.y,x2:hx,y2:hy,i:r.i,I:r.I,K:r.K,pol:r.pol,vp0:r.vp,ph0:r.ph,n:nn});
+    if(ch&&!bs&&!bd&&bg<0){if(!ch.cap)stack.push(Object.assign({},r,{x:hx,y:hy,dx:ch.dx2,dy:ch.dy2,ph,vp}));continue}
     if(bg>=0){const s=st[bg],a=Math.sqrt(r.I);s.inc[r.i]+=r.I;s.re[r.i]+=a*Math.cos(ph);s.im[r.i]+=a*Math.sin(ph);continue}
     if(bd){
       const b2=Object.assign({},r,{x:hx,y:hy,ph,vp}),p=bd;

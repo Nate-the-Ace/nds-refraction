@@ -7,7 +7,7 @@ const CHAPTERS=[
 {name:'Dichroics',intro:'A dichroic mirror reflects one band of colors and lets all the others pass straight through. Unlike a filter, nothing is thrown away.'},
 {name:'Interference',intro:'Laser light is a wave. When two beams recombine, they add or cancel depending on how far each traveled. Phase plates delay a beam; drag the amber knob to set the delay. Mirrors on rails slide along the beam. Watch the waves: beams that arrive in step add up, and beams half a wave apart cancel.'},
 {n:20,name:'Workshop',intro:'Every kind of optics is now in play, mixed together. New piece: the glass ball. It bends and splits light like a round prism, so where the beam strikes it decides the angle and the color. Drag it, there is nothing to turn.'},
-{n:20,name:'Studio',intro:'More pieces, more walls, tighter paths. Some pieces on the table are decoys.'},
+{n:20,name:'Studio',intro:'More pieces, more walls, tighter paths. Some pieces on the shelf are decoys. New obstacle: the black hole. Gravity bends light toward it, and anything that crosses the black disc is swallowed. Light that passes close curves a long way, so a mirror has to go where the bent beam arrives, not where a straight line would.'},
 {n:20,name:'Laboratory',intro:'Longer chains and bigger trees. Light has to be split, sorted, polarized and focused on the way.'},
 {n:20,name:'Observatory',intro:'Several systems work at once. Count your targets before you move anything.'},
 {n:20,name:'Grand Optics',intro:'The hardest set. Everything you have learned, with little room for error.'}

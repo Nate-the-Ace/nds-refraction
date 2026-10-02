@@ -36,6 +36,7 @@ Pieces added after the first 25 levels:
 - **Glass ball**: a round prism. Where the beam strikes it sets the angle and the color. It has nothing to turn.
 - **Zoom lens**: a variable lens. Select it and drag the amber knob to squeeze it from a strong concave lens, through flat, to a strong convex lens (16 settings).
 - Fixed lenses come in many focal lengths, convex and concave.
+- **Black hole**: an obstacle that bends light with real Schwarzschild geometry. Beams that pass close curve a long way, wide beams are lensed into crossing caustics, and anything that reaches the black disc is swallowed. In the sandbox you can resize one with the amber handle on its edge, the Smaller/Larger buttons, or `[` and `]`.
 
 **Endless** (menu): the game builds a new puzzle on the spot at one of five difficulties. The seed is shown in the title.
 
@@ -44,6 +45,8 @@ Pieces added after the first 25 levels:
 Progress is saved in the browser's local storage.
 
 ## How the light works
+
+- Black holes: rays are integrated along null geodesics, `u'' = -u + 1.5 rs u^2` with `u = 1/r`, in short chords. That reproduces the weak-field bend of `2 rs / b`, the photon sphere at `1.5 rs`, and capture for impact parameters below about `2.6 rs`.
 
 - Light is traced as 40 wavelengths from 400 to 700 nm.
 - Glass uses Snell's law with a Cauchy-style refractive index, so prisms disperse white light. Total internal reflection is handled.
