@@ -343,7 +343,8 @@ const HINT={
   fan:'A splitter sends half the light each way. Every target needs some.',
   sorter:'A dichroic mirror reflects its colors and passes the rest. Send each color to its own target.',
   combine:'Merge the beams so every color passes through the slot.',
-  hole:'A black hole bends light toward it and swallows anything that crosses the black disc. Place the mirrors where the bent beam arrives.',
+  hole:'A black hole bends light toward it, and shorter wavelengths bend more. Anything that crosses the black disc is lost. Place the mirrors where the bent beam arrives.',
+  holeRainbow:'Gravity bends blue more than red, so white light fans into a rainbow around a black hole. Catch only the color the target wants.',
   orb:'A glass ball bends light like a round prism. Where the beam strikes it sets the angle and the color.',
   prism:'Glass bends each color differently. Find the angle that sends only the target color in.',
   zoom:'This lens squeezes to any focal length. Slide it and set its dial so the focus lands on the target.',
@@ -580,8 +581,9 @@ function closestArc(p,bh){
   return {arc:bs,d:best};
 }
 function famHole(rnd,c){
-  const sp=newSpec(),band=pick(rnd,[RED,GRN,BLU]);
-  const iw=band===RED?30:band===GRN?18:8;
+  const sp=newSpec(),rainbow=rnd()<0.5;
+  const band=rainbow?WHITE:pick(rnd,[RED,GRN,BLU]);
+  const iw=rainbow?ri(rnd,8,32):(band===RED?30:band===GRN?18:8);
   const rs=5*ri(rnd,3,5);
   const bhs=[{t:'bh',x:5*ri(rnd,70,130),y:5*ri(rnd,45,75),r:rs,fixed:1}];
   if(c>=4&&rnd()<0.6){
@@ -611,7 +613,8 @@ function famHole(rnd,c){
   const run=()=>evalRaw(assemble(sp));
   let tr=run(),path=pathOf(tr,iw),sPrev=0;
   const minD=()=>Math.min(...bhs.map(q=>closestArc(path,q).d));
-  if(path.length<3||minD()<rs*1.3)return null;
+  const safe=rainbow?1.6:1.4;
+  if(path.length<3||minD()<rs*safe)return null;
   let sArc=closestArc(path,bh).arc;
   const nodes=[[ex,ey,70]].concat(bhs.map(q=>[q.x,q.y,q.r*3+40]));
   if(pre)nodes.push([pre.x,pre.y,90]);
@@ -626,7 +629,7 @@ function famHole(rnd,c){
       const mx=r5(pt.x),my=r5(pt.y);
       sp.mov.push({p:{t:'mirror',x:mx,y:my,a}});
       const t2=run(),p2=pathOf(t2,iw);
-      if(p2.length<3||Math.min(...bhs.map(q=>closestArc(p2,q).d))<rs*1.3){sp.mov.pop();continue}
+      if(p2.length<3||Math.min(...bhs.map(q=>closestArc(p2,q).d))<rs*safe){sp.mov.pop();continue}
       path=p2;sPrev=s;placed=true;nodes.push([mx,my,90]);
     }
     if(!placed)return null;
@@ -641,14 +644,23 @@ function famHole(rnd,c){
     goal=pt;
   }
   if(!goal)return null;
-  makeGoal(sp,{t:'goal',x:goal.x,y:goal.y,band,r:18,fixed:1},[16,19,23,28]);
+  makeGoal(sp,{t:'goal',x:goal.x,y:goal.y,band,r:18,fixed:1,...(rainbow?{ex:1}:{})},rainbow?[10,12,14,17,20,24,28]:[16,19,23,28]);
   sp.allowFail=2;
+  if(rainbow)sp.hook=()=>{
+    const gp=sp.goals[0].p;gp.band=WHITE;gp.need=0.03;delete gp.ex;
+    const tr2=evalRaw(assemble(sp)),arr=new Set();
+    for(const q of tr2.rays)if(Math.hypot(q.x2-gp.x,q.y2-gp.y)<=gp.r+0.5)arr.add(q.i);
+    if(arr.size<4||arr.size>16)return false;
+    const a=[...arr],lo2=Math.min(...a),hi2=Math.max(...a);
+    gp.band=[Math.max(400,WL[lo2]-1),Math.min(700,WL[hi2]+1)];gp.ex=1;
+    return true;
+  };
   // gravity must matter: with the holes gone the layout must not light the target
   const t0=evalRaw(assemble(sp).filter(q=>q.t!=='bh'));
   if(allLit(t0.res))return null;
   const keep={legs:path.map(s=>({x1:s[0],y1:s[1],x2:s[2],y2:s[3]})),pts:nodes.concat([[goal.x,goal.y,60]]),walls:[]};
   addWalls(rnd,sp,keep,c<3?0:1,null);
-  return {sp,meta:{name:pickName(rnd,'hole'),hint:HINT.hole}};
+  return {sp,meta:{name:pickName(rnd,'hole'),hint:rainbow?HINT.holeRainbow:HINT.hole}};
 }
 
 function famPinhole(rnd,c){

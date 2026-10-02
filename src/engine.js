@@ -56,10 +56,14 @@ const BOX=[[0,0,W,0],[W,0,W,H],[W,H,0,H],[0,H,0,0]].map(([a,b,c,d])=>({x1:a,y1:b
 // Black holes: light follows Schwarzschild null geodesics. In the plane, with u=1/r and
 // the angle phi around the hole, u'' = -u + 1.5*rs*u^2 (rs = horizon radius). Rays are
 // advanced in short chords by integrating that equation; inside rs they are swallowed.
+// Game rule: the pull depends on wavelength, so shorter wavelengths bend more and white light
+// fans out like it does in glass. GS scales the effective horizon radius (0.7 at 700 nm, 1.3 at 400 nm).
+const GS=wl=>1+0.3*(550-wl)/150;
 function bhChord(r,bhs){
+  const gs=GS(WL[r.i]);
   let nb=null,nd=1e9;
   for(const b of bhs){const d=Math.hypot(r.x-b.x,r.y-b.y);if(d<nd){nd=d;nb=b}}
-  const rs=nb.r;
+  const rs=nb.r*gs;
   if(nd<=rs)return {cap:1,len:0};
   const dx=r.x-nb.x,dy=r.y-nb.y;
   const cp=(dx*r.dx+dy*r.dy)/nd,sn=(dx*r.dy-dy*r.dx)/nd,as=Math.abs(sn);
@@ -85,7 +89,7 @@ function bhChord(r,bhs){
   for(const b of bhs){
     if(b===nb)continue;
     const bx=b.x-x2,by=b.y-y2,d=Math.hypot(bx,by),dd=bx*dx2+by*dy2,px=bx-dd*dx2,py=by-dd*dy2;
-    const f=b.r*L/(d*d*d);dx2+=px*f;dy2+=py*f;
+    const f=b.r*gs*L/(d*d*d);dx2+=px*f;dy2+=py*f;
   }
   const hl=Math.hypot(dx2,dy2);dx2/=hl;dy2/=hl;
   const cx=x2-r.x,cy=y2-r.y,len=Math.hypot(cx,cy);
@@ -221,4 +225,4 @@ function evalGoal(g,s){
   const prog=inN?hit/inN:0;
   return {prog,pct,lit:prog>=0.7&&(!g.ex||outside<=2),bad:!!g.ex&&outside>2};
 }
-if(typeof module!=='undefined')module.exports={W,H,NW,WL,ior,wlRGB,normalize,trace,segsOf,DIALS,DISC,ZF,zf};
+if(typeof module!=='undefined')module.exports={GS,W,H,NW,WL,ior,wlRGB,normalize,trace,segsOf,DIALS,DISC,ZF,zf};

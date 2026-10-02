@@ -46,7 +46,7 @@ Progress is saved in the browser's local storage.
 
 ## How the light works
 
-- Black holes: rays are integrated along null geodesics, `u'' = -u + 1.5 rs u^2` with `u = 1/r`, in short chords. That reproduces the weak-field bend of `2 rs / b`, the photon sphere at `1.5 rs`, and capture for impact parameters below about `2.6 rs`.
+- Black holes: the pull depends on wavelength (a game rule, not real relativity), so blue bends more than red and white light disperses around a hole. Rays are integrated along null geodesics, `u'' = -u + 1.5 rs u^2` with `u = 1/r`, in short chords. That reproduces the weak-field bend of `2 rs / b`, the photon sphere at `1.5 rs`, and capture for impact parameters below about `2.6 rs`.
 
 - Light is traced as 40 wavelengths from 400 to 700 nm.
 - Glass uses Snell's law with a Cauchy-style refractive index, so prisms disperse white light. Total internal reflection is handled.
