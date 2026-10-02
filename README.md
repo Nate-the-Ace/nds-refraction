@@ -7,7 +7,7 @@ Single static page, no dependencies, no build tools needed to play. Open `index.
 ## Play
 
 Enable GitHub Pages on the `main` branch (root) and the game is served at
-`https://nschonegg.github.io/nds-refraction/`.
+`https://nate-the-ace.github.io/nds-refraction/`.
 
 ## Controls
 
