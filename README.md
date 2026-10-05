@@ -12,8 +12,8 @@ Enable GitHub Pages on the `main` branch (root) and the game is served at
 ## Controls
 
 - The shelf at the bottom holds the level's movable pieces in drawers by kind (Mirrors, Glass, Lenses, Color, Polarization, Waves), with the quantity left on each. Click a piece or drag it onto the board. Drag it back onto the shelf, or press Put back, to return it.
-- Drag a piece with a blue ring to move it. Bolted pieces are fixed.
-- Drag the blue dot at the end of a piece to turn it, one degree at a time (hold `Shift` for a tenth of a degree); the angle shows while you drag. Positions snap to one board unit; zoom in to place pieces more precisely. `Q` / `E` or the arrow keys turn it a degree (`Shift` for a tenth); the Turn buttons repeat when held, and a mouse wheel turns it too.
+- Drag a piece with a blue ring to move it, or nudge it with the arrow keys. Bolted pieces are fixed.
+- Drag the blue dot at the end of a piece to turn it, one degree at a time (hold `Shift` for a tenth of a degree); the angle shows while you drag. Positions snap to one board unit; zoom in to place pieces more precisely. `Q` / `E` turn it a degree (`Shift` for a tenth). The arrow keys move the selected piece one unit (`Shift` for ten); the Turn buttons repeat when held, and a mouse wheel turns it too.
 - Polarizers, waveplates, polarizing splitters and phase plates have an amber knob. Drag it around the ring to set the axis or delay.
 - Zoom with pinch (touch), Ctrl/Cmd + wheel or trackpad pinch, `+` / `-`, or the on-screen + / - / Fit buttons. Drag empty space to pan when zoomed. `0` fits the board. A plain wheel turns the selected piece, or zooms if nothing is selected.
 - `Tab` / `Shift+Tab` steps through the movable pieces.

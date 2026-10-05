@@ -557,6 +557,19 @@ try{
     tip(innerHeight>innerWidth&&innerWidth<700?'Pinch to zoom the board. Turn your phone sideways for a bigger one.':'Pinch to zoom, drag empty space to pan.');
   }
 }catch(e){}
+// arrow keys move the selected piece (along its rail if it has one)
+function nudge(dx,dy){
+  if(!sel||sel.fixed)return;
+  if(sel.rail!==undefined){
+    const r=sel.rail*D2R,c=Math.cos(r),sn=Math.sin(r);
+    let t=(sel.x-sel.ox)*c+(sel.y-sel.oy)*sn+dx*c+dy*sn;
+    t=Math.max(-sel.range,Math.min(sel.range,Math.round(t)));
+    sel.x=sel.ox+c*t;sel.y=sel.oy+sn*t;
+  }else{
+    sel.x=Math.max(30,Math.min(W-30,sel.x+dx));sel.y=Math.max(30,Math.min(H-30,sel.y+dy));
+  }
+  dirty=true;litSince=0;if(sandbox)sbxSave();
+}
 function turn(d){if(!sel||sel.norot)return;sel.a+=d*D2R;dirty=true;if(sandbox)sbxSave()}
 function dial(d){
   if(!sel||!DIALS[sel.t])return;
@@ -576,12 +589,15 @@ function holdTurn(btn,dir){
 holdTurn($('rL'),-1);holdTurn($('rR'),1);
 window.addEventListener('keydown',e=>{
   const s=e.shiftKey?0.1:1;
-  if(e.key==='q'||e.key==='ArrowLeft')turn(-s);
-  else if(e.key==='e'||e.key==='ArrowRight')turn(s);
-  else if((e.key==='['||e.key==='ArrowDown')&&sel&&sel.t==='bh'&&!sel.fixed){sel.r=Math.max(6,sel.r-2);dirty=true;if(sandbox){sbxSave();updSel()}}
-  else if((e.key===']'||e.key==='ArrowUp')&&sel&&sel.t==='bh'&&!sel.fixed){sel.r=Math.min(60,sel.r+2);dirty=true;if(sandbox){sbxSave();updSel()}}
-  else if(e.key==='['||e.key==='ArrowDown')dial(-1);
-  else if(e.key===']'||e.key==='ArrowUp')dial(1);
+  if(e.key.startsWith('Arrow')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&(document.activeElement===document.body||document.activeElement===cv)&&!$('over').classList.contains('on')){
+    if(sel&&!sel.fixed){e.preventDefault();const k=e.shiftKey?10:1;nudge(e.key==='ArrowLeft'?-k:e.key==='ArrowRight'?k:0,e.key==='ArrowUp'?-k:e.key==='ArrowDown'?k:0)}
+  }
+  else if(e.key==='q'||e.key==='Q')turn(-s);
+  else if(e.key==='e'||e.key==='E')turn(s);
+  else if(e.key==='['&&sel&&sel.t==='bh'&&!sel.fixed){sel.r=Math.max(6,sel.r-2);dirty=true;if(sandbox){sbxSave();updSel()}}
+  else if(e.key===']'&&sel&&sel.t==='bh'&&!sel.fixed){sel.r=Math.min(60,sel.r+2);dirty=true;if(sandbox){sbxSave();updSel()}}
+  else if(e.key==='[')dial(-1);
+  else if(e.key===']')dial(1);
   else if(e.key==='r')restart();
   else if(sel&&!sel.fixed&&(e.key==='Delete'||e.key==='Backspace')){e.preventDefault();sbxDo('del')}
   else if(e.key==='Escape'){sel=null;updateCtl();dirty=true;updSel()}
