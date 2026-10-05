@@ -15,6 +15,9 @@ Enable GitHub Pages on the `main` branch (root) and the game is served at
 - Drag a piece with a blue ring to move it. Bolted pieces are fixed.
 - Drag the blue dot at the end of a piece to turn it. `Q` / `E` or the arrow keys turn it too.
 - Polarizers, waveplates, polarizing splitters and phase plates have an amber knob. Drag it around the ring to set the axis or delay.
+- Zoom with pinch (touch), Ctrl/Cmd + wheel or trackpad pinch, `+` / `-`, or the on-screen + / - / Fit buttons. Drag empty space to pan when zoomed. `0` fits the board. A plain wheel turns the selected piece, or zooms if nothing is selected.
+- `Tab` / `Shift+Tab` steps through the movable pieces.
+- On a phone held sideways the shelf and buttons move to a rail on the right; tap the level title to read its hint.
 - `Hint` reveals where one piece could go. `Reset` restarts the level. `R` also resets.
 - `Waves` toggles the wave animation. `Guides` toggles surface normals, angle arcs and lens focal marks.
 
