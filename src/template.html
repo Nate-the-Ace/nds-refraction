@@ -65,32 +65,36 @@ footer{justify-content:center;min-height:58px;flex-wrap:wrap}
 .pri{background:var(--acc);color:#05202e;border-color:var(--acc);font-weight:600}
 @media (pointer:coarse){button{min-height:44px}#selact button{min-height:44px}.grid button{min-height:48px}}
 @media (max-width:400px){header{padding:6px 8px}button{padding:8px 11px}footer{gap:6px;padding:6px 8px}.grid{gap:4px}.card{padding:16px}}
-/* phone held sideways: the shelf and buttons move to a rail so the board keeps the height */
-@media (orientation:landscape) and (max-height:540px){
-  header{padding:4px 8px;gap:6px}
-  h1{font-size:14px;cursor:pointer}
-  h1 small{display:none}
-  header button{min-height:36px;padding:5px 12px}
-  #main{flex-direction:row}
-  #side{display:flex;flex-direction:column;flex:none;width:128px;background:#0f121b;border-left:1px solid var(--line);overflow-y:auto;padding-right:env(safe-area-inset-right,0px)}
-  body{padding-right:0}
-  footer{flex-direction:column;align-items:stretch;gap:5px;padding:6px;min-height:0;flex-wrap:nowrap;margin-top:auto}
-  footer button{min-height:36px;padding:4px 6px;font-size:13px}
-  #shelf{border-top:0}
-  #tabs{flex-direction:column;flex-wrap:nowrap;overflow:visible;padding:6px;gap:5px;justify-content:flex-start}
-  #tabs .tab{min-height:36px;padding:5px 8px 10px}
-  body.dragging #drawer{visibility:hidden}
-  #drawer{position:absolute;right:128px;top:0;bottom:0;width:204px;flex-wrap:wrap;align-content:flex-start;overflow-y:auto;border-bottom:0;border-right:1px solid var(--line);z-index:6;box-shadow:-6px 0 14px -8px #000}
-  .item{min-width:84px}
-  #zoom{flex-direction:row}
-  #zoom button{width:40px;min-height:40px}
-  #tip{max-width:calc(100% - 200px)}
-  .card{padding:14px;max-height:96%}
-  .card h2{font-size:18px}
-  .card p{margin-bottom:10px}
-}
+/* phone held sideways, or forced sideways on a portrait phone: the shelf and buttons move to a rail so the board keeps the height */
+  html.rail header{padding:4px 8px;gap:6px}
+  html.rail h1{font-size:14px;cursor:pointer}
+  html.rail h1 small{display:none}
+  html.rail header button{min-height:36px;padding:5px 12px}
+  html.rail #main{flex-direction:row}
+  html.rail #side{display:flex;flex-direction:column;flex:none;width:128px;background:#0f121b;border-left:1px solid var(--line);overflow-y:auto;padding-right:env(safe-area-inset-right,0px)}
+  html.rail body{padding-right:0}
+  html.rail footer{flex-direction:column;align-items:stretch;gap:5px;padding:6px;min-height:0;flex-wrap:nowrap;margin-top:auto}
+  html.rail footer button{min-height:36px;padding:4px 6px;font-size:13px}
+  html.rail #shelf{border-top:0}
+  html.rail #tabs{flex-direction:column;flex-wrap:nowrap;overflow:visible;padding:6px;gap:5px;justify-content:flex-start}
+  html.rail #tabs .tab{min-height:36px;padding:5px 8px 10px}
+  html.rail body.dragging #drawer{visibility:hidden}
+  html.rail #drawer{position:absolute;right:128px;top:0;bottom:0;width:204px;flex-wrap:wrap;align-content:flex-start;overflow-y:auto;border-bottom:0;border-right:1px solid var(--line);z-index:6;box-shadow:-6px 0 14px -8px #000}
+  html.rail .item{min-width:84px}
+  html.rail #zoom{flex-direction:row}
+  html.rail #zoom button{width:40px;min-height:40px}
+  html.rail #tip{max-width:calc(100% - 200px)}
+  html.rail .card{padding:14px;max-height:96%}
+  html.rail .card h2{font-size:18px}
+  html.rail .card p{margin-bottom:10px}
+/* a portrait phone turns the whole interface a quarter turn, so the board always gets the long side */
+#app{flex:1;min-height:0;display:flex;flex-direction:column}
+html.rot{padding:0}
+html.rot body{padding:0;overflow:hidden}
+html.rot #app{position:fixed;top:0;left:0;width:var(--vh);height:var(--vw);transform-origin:0 0;transform:translateX(var(--vw)) rotate(90deg);padding-left:env(safe-area-inset-top,0px);padding-right:env(safe-area-inset-bottom,0px)}
 </style></head>
 <body>
+<div id="app">
 <header>
   <button id="bMenu" aria-label="Levels">Levels</button>
   <h1 id="title"></h1>
@@ -108,6 +112,7 @@ footer{justify-content:center;min-height:58px;flex-wrap:wrap}
   <button id="bWave" aria-label="Toggle wave animation">Waves: on</button>
   <button id="bGuide" aria-label="Toggle guides">Guides: on</button>
   </footer></div></div>
+</div>
 <div id="ghost"></div>
 <script>
 /*ENGINE*/
@@ -213,7 +218,7 @@ const CATS=[['light','Light',['emit','goal']],['gravity','Black holes',['bh']],[
 const catOf=t=>{const c=CATS.find(c=>c[2].includes(t));return c?c[0]:'wall'};
 const SB_ITEMS=['emit','goal','bh','mirror','split','dichro','prism','orb','lens','concave','zlens','filter','pol','hwp','pbs','phase','wall'];
 let shelf=[],openCat=null,drag=null;
-const RAIL=matchMedia('(orientation:landscape) and (max-height:540px)');
+const isRail=()=>document.documentElement.classList.contains('rail');
 function sigOf(p){return p.t+(p.t==='lens'?p.f:'')+((p.t==='filter'||p.t==='dichro')?p.band.join('-'):'')}
 function labelOf(p){
   switch(p.t){
@@ -246,7 +251,7 @@ function buildShelf(lv){
   }
   const cats=CATS.filter(c=>shelf.some(i=>i.cat===c[0]));
   if(!cats.some(c=>c[0]===openCat))openCat=cats.length?cats[0][0]:null;
-  if(RAIL.matches)openCat=null;
+  if(isRail())openCat=null;
   renderShelf();updSel();
 }
 function drawIcon(c,it){
@@ -312,7 +317,7 @@ function placeItem(it,x,y){
   q.x=Math.max(30,Math.min(W-30,Math.round(x/5)*5));q.y=Math.max(30,Math.min(H-30,Math.round(y/5)*5));
   const p=normalize(q);p.shelfKey=it.key;pieces.push(p);sel=p;
   if(it.n!==Infinity)it.n--;
-  if(RAIL.matches)openCat=null;
+  if(isRail())openCat=null;
   litSince=0;updateCtl();dirty=true;renderShelf();updSel();if(sandbox)sbxSave();
 }
 function returnPiece(p){
@@ -328,7 +333,7 @@ window.addEventListener('pointermove',e=>{
   if(!drag.moved&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>8){
     drag.moved=true;document.body.classList.add('dragging');const g=$('ghost');g.innerHTML='';const c=document.createElement('canvas');c.width=144;c.height=88;c.style.width='72px';c.style.height='44px';c.getContext('2d').scale(2,2);drawIcon(c,drag.it);g.appendChild(c);g.style.display='block';
   }
-  if(drag.moved){const g=$('ghost');g.style.left=(e.clientX-36)+'px';g.style.top=(e.clientY-22)+'px'}
+  if(drag.moved){const g=$('ghost');g.style.left=(e.clientX-36)+'px';g.style.top=(e.clientY-22)+'px';g.style.transform=ROT?'rotate(90deg)':''}
 });
 window.addEventListener('pointerup',e=>{
   if(!drag||e.pointerId!==drag.id)return;
@@ -374,10 +379,26 @@ function sbxDo(act){
   updateCtl();dirty=true;if(sandbox)sbxSave();updSel();
 }
 
+// layout mode: a portrait phone is turned a quarter turn (ROT) so the board gets the long side; sideways phones get the rail
+let ROT=false;
+function layoutMode(){
+  const de=document.documentElement,w=innerWidth,h=innerHeight;
+  const coarse=matchMedia('(pointer:coarse)').matches,off=/[?&]rot=0/.test(location.search);
+  ROT=coarse&&!off&&h>w&&w<=600;
+  de.style.setProperty('--vw',w+'px');de.style.setProperty('--vh',h+'px');
+  de.classList.toggle('rot',ROT);
+  de.classList.toggle('rail',ROT||(w>h&&h<=540));
+}
+// client (screen) coordinates -> pixels inside the board canvas, undoing the quarter turn when ROT
+function rel(cx,cy){
+  const r=cv.getBoundingClientRect();
+  return ROT?{x:cy-r.top,y:r.right-cx}:{x:cx-r.left,y:cy-r.top};
+}
 function resize(){
-  const r=cv.parentElement.getBoundingClientRect();
+  layoutMode();
+  const r=cv.parentElement;
   dpr=Math.min(window.devicePixelRatio||1,2);
-  cw=r.width;ch=r.height;cv.width=cw*dpr;cv.height=ch*dpr;
+  cw=r.clientWidth;ch=r.clientHeight;cv.width=cw*dpr;cv.height=ch*dpr;
   const pad=8;fit=Math.max(0.05,Math.min((cw-pad*2)/W,(ch-pad*2)/H));
   camApply();
 }
@@ -392,17 +413,17 @@ function camApply(){
 function camReset(){zm=1;camx=W/2;camy=H/2;camApply()}
 // zoom by factor f keeping the board point under client (cx,cy) fixed
 function zoomAt(f,cx,cy){
-  const r=cv.getBoundingClientRect(),sx=cx===undefined?cw/2:cx-r.left,sy=cy===undefined?ch/2:cy-r.top;
+  const q=cx===undefined?{x:cw/2,y:ch/2}:rel(cx,cy),sx=q.x,sy=q.y;
   const wx=(sx-ox)/sc,wy=(sy-oy)/sc;
   zm=Math.max(1,Math.min(ZMAX,zm*f));sc=fit*zm;
   camx=wx-(sx-cw/2)/sc;camy=wy-(sy-ch/2)/sc;camApply();
 }
 // grab targets must stay finger-sized when the board is scaled down: stretch UI sizes below 60% scale
 function ui(n){return n*Math.max(1,0.6/sc)}
-window.addEventListener('resize',resize);
+window.addEventListener('resize',resize);window.addEventListener('orientationchange',resize);
 // the stage also changes size when the shelf appears, the rail kicks in or fonts load, none of which fire a window resize
 try{new ResizeObserver(()=>resize()).observe(cv.parentElement)}catch(e){}
-function toW(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left-ox)/sc,y:(e.clientY-r.top-oy)/sc}}
+function toW(e){const p=rel(e.clientX,e.clientY);return{x:(p.x-ox)/sc,y:(p.y-oy)/sc}}
 function radius(p){return p.r!==undefined?p.r:p.t==='emit'?20:p.t==='wall'?Math.max(p.w,p.h)/2:p.len/2}
 function dialR(p){return ui(p.r!==undefined?p.r:p.t==='zlens'?46:26)}
 function handlePos(p){const hr=radius(p)+ui(28);return{x:p.x+Math.cos(p.a)*hr,y:p.y+Math.sin(p.a)*hr}}
@@ -436,14 +457,12 @@ function updateCtl(){
 }
 const pts=new Map();let pinch=null,pan=null;
 function pinchStart(){
-  const [a,b]=[...pts.values()],r=cv.getBoundingClientRect();
-  const mx=(a.x+b.x)/2-r.left,my=(a.y+b.y)/2-r.top;
+  const [a,b]=[...pts.values()],q=rel((a.x+b.x)/2,(a.y+b.y)/2),mx=q.x,my=q.y;
   pinch={d:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)),zm,wx:(mx-ox)/sc,wy:(my-oy)/sc};
   mode='pinch';pan=null;
 }
 function pinchMove(){
-  const [a,b]=[...pts.values()],r=cv.getBoundingClientRect();
-  const mx=(a.x+b.x)/2-r.left,my=(a.y+b.y)/2-r.top;
+  const [a,b]=[...pts.values()],q=rel((a.x+b.x)/2,(a.y+b.y)/2),mx=q.x,my=q.y;
   zm=Math.max(1,Math.min(ZMAX,pinch.zm*Math.hypot(a.x-b.x,a.y-b.y)/pinch.d));sc=fit*zm;
   camx=pinch.wx-(mx-cw/2)/sc;camy=pinch.wy-(my-ch/2)/sc;camApply();
 }
@@ -460,7 +479,7 @@ cv.addEventListener('pointerdown',e=>{
   for(let i=pieces.length-1;i>=0;i--)if(hit(pieces[i],w)){f=pieces[i];break}
   sel=f;
   if(f){mode='move';off={x:w.x-f.x,y:w.y-f.y}}
-  else if(zm>1.001){mode='pan';pan={x:e.clientX,y:e.clientY,cx:camx,cy:camy}}
+  else if(zm>1.001){mode='pan';pan=Object.assign(rel(e.clientX,e.clientY),{cx:camx,cy:camy})}
   else mode=null;
   updateCtl();dirty=true;updSel();
 });
@@ -478,7 +497,7 @@ cv.addEventListener('pointermove',e=>{
   if(mode==='pinch'){if(pts.size>=2&&pinch)pinchMove();return}
   if(!mode&&e.pointerType==='mouse'&&!solved){cursorFor(e);return}
   if(mode==='idle')return;
-  if(mode==='pan'&&pan){camx=pan.cx-(e.clientX-pan.x)/sc;camy=pan.cy-(e.clientY-pan.y)/sc;camApply();return}
+  if(mode==='pan'&&pan){const q=rel(e.clientX,e.clientY);camx=pan.cx-(q.x-pan.x)/sc;camy=pan.cy-(q.y-pan.y)/sc;camApply();return}
   if(!sel||!mode)return;
   const w=toW(e);
   if(mode==='size'){sel.r=Math.max(6,Math.min(60,Math.round(Math.hypot(w.x-sel.x,w.y-sel.y))));dirty=true;return}
@@ -562,7 +581,7 @@ window.addEventListener('keydown',e=>{
 });
 $('bReset').onclick=restart;
 $('title').onclick=()=>{
-  if(!RAIL.matches)return;
+  if(!isRail())return;
   card('<h2>'+LV.name+'</h2><p>'+LV.hint+'</p><div class="row"><button class="pri" id="hOk">Got it</button></div>');$('hOk').onclick=()=>$('over').classList.remove('on');
 };
 function waveLbl(){$('bWave').textContent='Waves: '+(wavy?'on':'off')}
