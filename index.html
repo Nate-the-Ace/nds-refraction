@@ -1872,7 +1872,7 @@ function placeItem(it,x,y){
   if(it.n<=0)return;
   const q=JSON.parse(JSON.stringify(it.proto));
   if(x===undefined){[x,y]=freeSpot()}
-  q.x=Math.max(30,Math.min(W-30,Math.round(x/5)*5));q.y=Math.max(30,Math.min(H-30,Math.round(y/5)*5));
+  q.x=Math.max(30,Math.min(W-30,Math.round(x)));q.y=Math.max(30,Math.min(H-30,Math.round(y)));
   const p=normalize(q);p.shelfKey=it.key;pieces.push(p);sel=p;
   if(it.n!==Infinity)it.n--;
   if(isRail())openCat=null;
@@ -2069,16 +2069,16 @@ cv.addEventListener('pointermove',e=>{
   }
   if(mode==='rot'){
     let a=Math.atan2(w.y-sel.y,w.x-sel.x);
-    if(!e.shiftKey){const st=5*D2R;a=Math.round(a/st)*st}
+    {const st=(e.shiftKey?0.1:1)*D2R;a=Math.round(a/st)*st}
     sel.a=a;
   }else if(sel.rail!==undefined){
     const r=sel.rail*D2R,c=Math.cos(r),s=Math.sin(r);
     let t=(w.x-off.x-sel.ox)*c+(w.y-off.y-sel.oy)*s;
-    t=Math.max(-sel.range,Math.min(sel.range,t));t=Math.round(t/5)*5;
+    t=Math.max(-sel.range,Math.min(sel.range,t));t=Math.round(t);
     sel.x=sel.ox+c*t;sel.y=sel.oy+s*t;
   }else{
-    sel.x=Math.max(30,Math.min(W-30,Math.round((w.x-off.x)/5)*5));
-    sel.y=Math.max(30,Math.min(H-30,Math.round((w.y-off.y)/5)*5));
+    sel.x=Math.max(30,Math.min(W-30,Math.round(w.x-off.x)));
+    sel.y=Math.max(30,Math.min(H-30,Math.round(w.y-off.y)));
   }
   dirty=true;
 });
@@ -2097,7 +2097,7 @@ cv.addEventListener('pointerup',endDrag);cv.addEventListener('pointercancel',end
 cv.addEventListener('wheel',e=>{
   // pinch on a trackpad arrives as ctrl+wheel; a plain wheel turns the selected piece, or zooms when nothing is selected
   if(e.ctrlKey||e.metaKey||!sel||sel.norot){e.preventDefault();zoomAt(Math.exp(-e.deltaY*(e.ctrlKey?0.01:0.0025)),e.clientX,e.clientY)}
-  else{e.preventDefault();turn(e.deltaY>0?5:-5)}
+  else{e.preventDefault();turn(e.deltaY>0?1:-1)}
 },{passive:false});
 $('zIn').onclick=()=>zoomAt(1.4);$('zOut').onclick=()=>zoomAt(1/1.4);$('zFit').onclick=camReset;
 function cycleSel(d){
@@ -2121,9 +2121,19 @@ function dial(d){
   const D=DIALS[sel.t];sel.ax=(((sel.ax+d*D.step)%D.mod)+D.mod)%D.mod;sel.kd=sel.ax;
   updateCtl();dirty=true;if(sandbox)sbxSave();
 }
-$('rL').onclick=()=>turn(-5);$('rR').onclick=()=>turn(5);
+// hold a turn button to keep turning, faster the longer it is held
+function holdTurn(btn,dir){
+  let t1=0,t2=0;
+  const stop=()=>{clearTimeout(t1);clearInterval(t2)};
+  btn.addEventListener('pointerdown',e=>{
+    e.preventDefault();turn(dir);let n=0;
+    t1=setTimeout(()=>{t2=setInterval(()=>turn(dir*(++n>12?5:1)),60)},350);
+  });
+  ['pointerup','pointerleave','pointercancel'].forEach(k=>btn.addEventListener(k,stop));
+}
+holdTurn($('rL'),-1);holdTurn($('rR'),1);
 window.addEventListener('keydown',e=>{
-  const s=e.shiftKey?1:5;
+  const s=e.shiftKey?0.1:1;
   if(e.key==='q'||e.key==='ArrowLeft')turn(-s);
   else if(e.key==='e'||e.key==='ArrowRight')turn(s);
   else if((e.key==='['||e.key==='ArrowDown')&&sel&&sel.t==='bh'&&!sel.fixed){sel.r=Math.max(6,sel.r-2);dirty=true;if(sandbox){sbxSave();updSel()}}
@@ -2425,6 +2435,7 @@ function draw(time){
         const h=handlePos(p);
         ctx.strokeStyle='rgba(127,214,255,.5)';line(p.x,p.y,h.x,h.y);
         ctx.fillStyle='#7fd6ff';ctx.beginPath();ctx.arc(h.x,h.y,ui(9),0,7);ctx.fill();
+        if(mode==='rot'){ctx.font='600 '+Math.round(ui(13))+'px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText(fmt(((p.a/D2R%360)+360)%360),h.x,h.y-ui(16))}
       }
     }
   }
