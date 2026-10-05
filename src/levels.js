@@ -109,14 +109,14 @@ const LEVELS=[
   {t:'hwp',x:700,y:150,a:30,ax:0},
   {t:'goal',x:500,y:80,band:MONO,r:15,need:0.9,show:1,fixed:1}],
  sol:{2:[500,500,-45],3:[500,380,0,45]}},
-{name:'Step by step',hint:'Three polarizers, turned a little each, beat one big jump.',pol:1,
+{name:'Step by step',hint:'Drop all three polarizers on the beam. Drag the amber knob on each to set its axis. Turn them in small steps, a bit more each one, toward the last polarizer.',pol:1,
  pieces:[
   {t:'emit',x:100,y:300,a:0,band:MONO,pol:0,fixed:1},
   {t:'pol',x:800,y:300,a:90,ax:90,fixed:1},
   {t:'pol',x:300,y:100,a:0,ax:0},
   {t:'pol',x:450,y:100,a:0,ax:0},
   {t:'pol',x:600,y:100,a:0,ax:0},
-  {t:'goal',x:900,y:300,band:MONO,r:15,need:0.5,show:1,fixed:1}],
+  {t:'goal',x:900,y:300,band:MONO,r:15,need:0.35,show:1,fixed:1}],
  sol:{2:[300,300,90,22.5],3:[450,300,90,45],4:[600,300,90,67.5]}},
 {name:'Balance',hint:'A polarizing splitter divides light by polarization. Make both halves equal.',pol:1,
  pieces:[
